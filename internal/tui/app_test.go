@@ -582,3 +582,47 @@ func TestCollectionSearch(t *testing.T) {
 		t.Errorf("esc in search: searching=%v value=%q filtered=%v depth=%d", cs.searching, cs.search.Value(), cs.filtered, a.Depth())
 	}
 }
+
+func TestQuickPageSize(t *testing.T) {
+	srv := server(t)
+	defer srv.Close()
+	a := newTestApp(t, srv)
+	selectResource(t, a, "classes")
+	press(t, a, "enter")
+	if !strings.Contains(a.View(), "limit 100") || !strings.Contains(a.View(), "L to change") {
+		t.Errorf("header should show limit and hint:\n%s", a.View())
+	}
+	press(t, a, "L")
+	qp, ok := a.top().(*quickParamScreen)
+	if !ok || qp.param != "limit" || qp.form.get("limit") != "100" {
+		t.Fatalf("top=%T param=%v", a.top(), qp)
+	}
+	// Invalid value is rejected and the editor stays open.
+	press(t, a, "ctrl+u")
+	typeText(t, a, "lots")
+	press(t, a, "enter")
+	if !a.statusErr || a.top() != qp {
+		t.Errorf("expected validation error, status=%q top=%T", a.status, a.top())
+	}
+	press(t, a, "ctrl+u")
+	typeText(t, a, "1000")
+	press(t, a, "enter")
+	cs, ok := a.top().(*collectionScreen)
+	if !ok || cs.req.Query["limit"] != "1000" || cs.req.Query["offset"] != "0" {
+		t.Fatalf("top=%T query=%v", a.top(), cs.req.Query)
+	}
+	if !strings.Contains(cs.resp.URL, "limit=1000") || !strings.Contains(a.View(), "limit 1000") {
+		t.Errorf("url=%s", cs.resp.URL)
+	}
+	// Paging math uses the new size.
+	press(t, a, "n")
+	if !strings.Contains(a.status, "no more pages") {
+		t.Errorf("status = %q", a.status)
+	}
+	// The full editor also exposes limit, pre-filled with the current value.
+	press(t, a, "e")
+	rq := a.top().(*requestScreen)
+	if rq.form.get("q:limit") != "1000" {
+		t.Errorf("editor limit = %q", rq.form.get("q:limit"))
+	}
+}

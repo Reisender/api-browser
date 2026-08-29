@@ -331,6 +331,12 @@ func (s *collectionScreen) update(a *App, msg tea.Msg) tea.Cmd {
 		case "s":
 			a.push(newQuickParamScreen(a, s, "sort", "Field to sort by (orderBy=asc|desc is set separately with e)"))
 			return nil
+		case "L":
+			if pg := a.spec.Paging; pg != nil {
+				a.push(newQuickParamScreen(a, s, pg.LimitParam, "Records per page (e.g. 1000). Offset resets to 0."))
+				return nil
+			}
+			return setStatus("this API spec has no paging configured", true)
 		case "n", "]":
 			return s.page(a, +1)
 		case "p", "[":
@@ -368,7 +374,10 @@ func (s *collectionScreen) view(a *App, w, h int) string {
 		if off == "" {
 			off = "0"
 		}
-		pg = fmt.Sprintf("  offset %s  limit %s", off, lim)
+		if lim == "" {
+			lim = "(server default)"
+		}
+		pg = fmt.Sprintf("  offset %s  limit %s %s", off, lim, styleDim.Render("[L to change]"))
 	}
 	q := ""
 	if f := s.req.Query["filter"]; f != "" {
@@ -396,7 +405,7 @@ func (s *collectionScreen) view(a *App, w, h int) string {
 }
 
 func (s *collectionScreen) help() []helpEntry {
-	return []helpEntry{{"enter", "open item"}, {"/", "search rows"}, {"n/p", "next / prev page"}, {"f", "server filter"}, {"s", "set sort"}, {"e", "edit all params"}, {"r", "raw JSON"}, {"u", "show URL"}, {"y", "copy id"}, {"R", "reload"}, {"g/G", "top / bottom"}}
+	return []helpEntry{{"enter", "open item"}, {"/", "search rows"}, {"n/p", "next / prev page"}, {"f", "server filter"}, {"s", "set sort"}, {"L", "page size"}, {"e", "edit all params"}, {"r", "raw JSON"}, {"u", "show URL"}, {"y", "copy id"}, {"R", "reload"}, {"g/G", "top / bottom"}}
 }
 
 // --------------------------------------------------------------------- item
@@ -779,6 +788,11 @@ func (s *quickParamScreen) update(a *App, msg tea.Msg) tea.Cmd {
 	if k, ok := msg.(tea.KeyMsg); ok && k.String() == "enter" {
 		req := cloneRequest(s.coll.req)
 		v := strings.TrimSpace(s.form.get(s.param))
+		if pg := a.spec.Paging; pg != nil && s.param == pg.LimitParam && v != "" {
+			if n, err := strconv.Atoi(v); err != nil || n <= 0 {
+				return setStatus("page size must be a positive integer", true)
+			}
+		}
 		if v == "" {
 			delete(req.Query, s.param)
 		} else {
