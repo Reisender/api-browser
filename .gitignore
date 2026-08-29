@@ -1,0 +1,4 @@
+/apibrowser
+/bin/
+*.test
+coverage.out

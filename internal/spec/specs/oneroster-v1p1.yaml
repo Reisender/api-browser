@@ -1,0 +1,189 @@
+name: OneRoster v1p1
+description: IMS Global OneRoster v1.1 REST binding (rostering + gradebook)
+basePath: /ims/oneroster/v1p1
+idField: sourcedId
+
+paging:
+  limitParam: limit
+  offsetParam: offset
+  defaultLimit: 100
+
+queryParams:
+  - name: limit
+    description: Max number of records to return
+    default: "100"
+  - name: offset
+    description: Number of records to skip
+    default: "0"
+  - name: sort
+    description: Field to sort by
+  - name: orderBy
+    description: asc or desc
+  - name: filter
+    description: "Filter expression, e.g. status='active' AND role='student'"
+  - name: fields
+    description: Comma-separated list of fields to return
+
+refTypes:
+  user: users
+  student: students
+  teacher: teachers
+  org: orgs
+  school: schools
+  class: classes
+  course: courses
+  academicSession: academicSessions
+  term: terms
+  gradingPeriod: gradingPeriods
+  enrollment: enrollments
+  demographics: demographics
+  lineItem: lineItems
+  category: categories
+  result: results
+
+resources:
+  - name: academicSessions
+    description: Terms, semesters, grading periods and school years
+    listPath: /academicSessions
+    itemPath: /academicSessions/{sourcedId}
+    listKey: academicSessions
+    itemKey: academicSession
+    columns: [sourcedId, title, type, startDate, endDate, schoolYear, status]
+
+  - name: terms
+    description: Academic sessions of type term
+    listPath: /terms
+    itemPath: /terms/{sourcedId}
+    listKey: academicSessions
+    itemKey: academicSession
+    columns: [sourcedId, title, type, startDate, endDate, schoolYear, status]
+    related:
+      - {name: classes, path: "/terms/{sourcedId}/classes", listKey: classes, resource: classes}
+      - {name: gradingPeriods, path: "/terms/{sourcedId}/gradingPeriods", listKey: academicSessions, resource: gradingPeriods}
+
+  - name: gradingPeriods
+    description: Academic sessions of type gradingPeriod
+    listPath: /gradingPeriods
+    itemPath: /gradingPeriods/{sourcedId}
+    listKey: academicSessions
+    itemKey: academicSession
+    columns: [sourcedId, title, type, startDate, endDate, schoolYear, status]
+
+  - name: orgs
+    description: Organisations (districts, schools, departments)
+    listPath: /orgs
+    itemPath: /orgs/{sourcedId}
+    listKey: orgs
+    itemKey: org
+    columns: [sourcedId, name, type, identifier, status]
+
+  - name: schools
+    description: Organisations of type school
+    listPath: /schools
+    itemPath: /schools/{sourcedId}
+    listKey: orgs
+    itemKey: org
+    columns: [sourcedId, name, type, identifier, status]
+    related:
+      - {name: classes, path: "/schools/{sourcedId}/classes", listKey: classes, resource: classes}
+      - {name: courses, path: "/schools/{sourcedId}/courses", listKey: courses, resource: courses}
+      - {name: enrollments, path: "/schools/{sourcedId}/enrollments", listKey: enrollments, resource: enrollments}
+      - {name: students, path: "/schools/{sourcedId}/students", listKey: users, resource: students}
+      - {name: teachers, path: "/schools/{sourcedId}/teachers", listKey: users, resource: teachers}
+      - {name: terms, path: "/schools/{sourcedId}/terms", listKey: academicSessions, resource: terms}
+
+  - name: courses
+    description: Courses offered by an org
+    listPath: /courses
+    itemPath: /courses/{sourcedId}
+    listKey: courses
+    itemKey: course
+    columns: [sourcedId, title, courseCode, schoolYear, status]
+    related:
+      - {name: classes, path: "/courses/{sourcedId}/classes", listKey: classes, resource: classes}
+
+  - name: classes
+    description: Class sections (instances of a course)
+    listPath: /classes
+    itemPath: /classes/{sourcedId}
+    listKey: classes
+    itemKey: class
+    columns: [sourcedId, title, classCode, classType, location, status]
+    related:
+      - {name: students, path: "/classes/{sourcedId}/students", listKey: users, resource: students}
+      - {name: teachers, path: "/classes/{sourcedId}/teachers", listKey: users, resource: teachers}
+      - {name: lineItems, path: "/classes/{sourcedId}/lineItems", listKey: lineItems, resource: lineItems}
+      - {name: results, path: "/classes/{sourcedId}/results", listKey: results, resource: results}
+      - {name: categories, path: "/classes/{sourcedId}/categories", listKey: categories, resource: categories}
+
+  - name: users
+    description: All users (students, teachers, parents, admins)
+    listPath: /users
+    itemPath: /users/{sourcedId}
+    listKey: users
+    itemKey: user
+    columns: [sourcedId, givenName, familyName, role, username, email, status]
+    related:
+      - {name: classes, path: "/users/{sourcedId}/classes", listKey: classes, resource: classes}
+
+  - name: students
+    description: Users with the student role
+    listPath: /students
+    itemPath: /students/{sourcedId}
+    listKey: users
+    itemKey: user
+    columns: [sourcedId, givenName, familyName, username, email, status]
+    related:
+      - {name: classes, path: "/students/{sourcedId}/classes", listKey: classes, resource: classes}
+
+  - name: teachers
+    description: Users with the teacher role
+    listPath: /teachers
+    itemPath: /teachers/{sourcedId}
+    listKey: users
+    itemKey: user
+    columns: [sourcedId, givenName, familyName, username, email, status]
+    related:
+      - {name: classes, path: "/teachers/{sourcedId}/classes", listKey: classes, resource: classes}
+
+  - name: enrollments
+    description: User membership in classes
+    listPath: /enrollments
+    itemPath: /enrollments/{sourcedId}
+    listKey: enrollments
+    itemKey: enrollment
+    columns: [sourcedId, role, primary, beginDate, endDate, status]
+
+  - name: demographics
+    description: Demographic data for users
+    listPath: /demographics
+    itemPath: /demographics/{sourcedId}
+    listKey: demographics
+    itemKey: demographics
+    columns: [sourcedId, birthDate, sex, status]
+
+  - name: categories
+    description: Gradebook categories
+    listPath: /categories
+    itemPath: /categories/{sourcedId}
+    listKey: categories
+    itemKey: category
+    columns: [sourcedId, title, status]
+
+  - name: lineItems
+    description: Gradebook line items (assignments)
+    listPath: /lineItems
+    itemPath: /lineItems/{sourcedId}
+    listKey: lineItems
+    itemKey: lineItem
+    columns: [sourcedId, title, assignDate, dueDate, resultValueMin, resultValueMax, status]
+    related:
+      - {name: results, path: "/lineItems/{sourcedId}/results", listKey: results, resource: results}
+
+  - name: results
+    description: Gradebook results (scores)
+    listPath: /results
+    itemPath: /results/{sourcedId}
+    listKey: results
+    itemKey: result
+    columns: [sourcedId, score, scoreStatus, scoreDate, comment, status]
