@@ -4,8 +4,11 @@ package tui
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
+
+	"encoding/json"
 
 	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -36,6 +39,7 @@ type App struct {
 	showHelp  bool
 	seq       int
 	quitting  bool
+	agg       *aggregate
 }
 
 // New constructs the application.
@@ -93,6 +97,92 @@ func (a *App) replaceList(res *spec.Resource, req client.Request, title string) 
 func (a *App) replaceItem(res *spec.Resource, req client.Request, title string) tea.Cmd {
 	a.loading = "GET " + title
 	return a.fetchCmd(fetchItem, "\x00replace:"+title, res, req)
+}
+
+// fetchAllPages walks every page of the collection's request and replaces the
+// screen with the combined result.
+func (a *App) fetchAllPages(cs *collectionScreen) tea.Cmd {
+	pg := a.spec.Paging
+	if pg == nil {
+		return setStatus("this API spec has no paging configured", true)
+	}
+	if cs.allPages {
+		return setStatus("all pages are already loaded", false)
+	}
+	limit, _ := strconv.Atoi(cs.req.Query[pg.LimitParam])
+	if limit <= 0 {
+		limit = pg.DefaultLimit
+		if limit <= 0 {
+			limit = 100
+		}
+	}
+	req := cloneRequest(cs.req)
+	req.Query[pg.LimitParam] = strconv.Itoa(limit)
+	req.Query[pg.OffsetParam] = "0"
+	a.agg = &aggregate{name: cs.name, resource: cs.resource, req: req, limit: limit, search: cs.search.Value()}
+	a.loading = "fetching all pages…  page 1"
+	return a.fetchCmd(fetchList, "\x00all:"+cs.name, cs.resource, req)
+}
+
+func (a *App) handleAggregate(m fetchMsg) tea.Cmd {
+	agg := a.agg
+	resp := m.resp
+	if resp.Error != nil {
+		a.agg = nil
+		a.loading = ""
+		if resp.Body != nil {
+			a.push(newRawScreen("error "+agg.name, resp))
+		}
+		return setStatus(fmt.Sprintf("fetch all failed on page %d: %v", agg.pages+1, resp.Error), true)
+	}
+	agg.pages++
+	agg.items = append(agg.items, resp.Items...)
+	agg.url, agg.status = resp.URL, resp.Status
+	agg.duration += resp.Duration
+	pg := a.spec.Paging
+	if len(resp.Items) >= agg.limit && len(resp.Items) > 0 && agg.pages < maxAggregatePages {
+		next := cloneRequest(agg.req)
+		off, _ := strconv.Atoi(agg.req.Query[pg.OffsetParam])
+		next.Query[pg.OffsetParam] = strconv.Itoa(off + agg.limit)
+		agg.req = next
+		a.loading = fmt.Sprintf("fetching all pages…  page %d, %d records", agg.pages+1, len(agg.items))
+		return a.fetchCmd(fetchList, "\x00all:"+agg.name, agg.resource, next)
+	}
+	// Done: build a combined response.
+	a.agg = nil
+	a.loading = ""
+	combined := &client.Response{URL: agg.url, Status: agg.status, Duration: agg.duration, Items: agg.items}
+	key := agg.req.ListKey
+	if key == "" {
+		key = "items"
+	}
+	body := map[string]any{key: anySlice(agg.items)}
+	combined.Body = body
+	combined.Raw, _ = json.Marshal(body)
+	first := cloneRequest(agg.req)
+	first.Query[pg.OffsetParam] = "0"
+	cs := newCollectionScreen(a, agg.name, agg.resource, first, combined)
+	cs.allPages = true
+	cs.pages = agg.pages
+	cs.search.SetValue(agg.search)
+	cs.applySearch()
+	if _, ok := a.top().(*collectionScreen); ok {
+		a.pop()
+	}
+	a.push(cs)
+	note := ""
+	if agg.pages >= maxAggregatePages {
+		note = fmt.Sprintf("  (stopped at %d-page cap)", maxAggregatePages)
+	}
+	return setStatus(fmt.Sprintf("loaded %d records from %d page(s) in %s%s", len(agg.items), agg.pages, agg.duration.Round(time.Millisecond), note), false)
+}
+
+func anySlice(items []map[string]any) []any {
+	out := make([]any, len(items))
+	for i, it := range items {
+		out[i] = it
+	}
+	return out
 }
 
 func (a *App) followRef(ref client.Ref) tea.Cmd {
@@ -165,6 +255,9 @@ func (a *App) handleFetch(m fetchMsg) tea.Cmd {
 	if m.seq != a.seq {
 		return nil // stale
 	}
+	if strings.HasPrefix(m.title, "\x00all:") && a.agg != nil {
+		return a.handleAggregate(m)
+	}
 	a.loading = ""
 	resp := m.resp
 	if m.title == "__test__" {
@@ -227,6 +320,10 @@ func (a *App) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if k.String() == "esc" {
 			a.seq++ // invalidate in-flight request
 			a.loading = ""
+			if agg := a.agg; agg != nil {
+				a.agg = nil
+				return a, setStatus(fmt.Sprintf("cancelled after %d page(s), %d records", agg.pages, len(agg.items)), false)
+			}
 			return a, setStatus("cancelled", false)
 		}
 		return a, nil

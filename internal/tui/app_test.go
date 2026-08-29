@@ -2,9 +2,11 @@ package tui
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -625,4 +627,115 @@ func TestQuickPageSize(t *testing.T) {
 	if rq.form.get("q:limit") != "1000" {
 		t.Errorf("editor limit = %q", rq.form.get("q:limit"))
 	}
+}
+
+// pagedServer serves N records in pages according to limit/offset.
+func pagedServer(t *testing.T, total int) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ims/oneroster/v1p1/users", func(w http.ResponseWriter, r *http.Request) {
+		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+		offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+		var users []any
+		for i := offset; i < total && i < offset+limit; i++ {
+			name := "User"
+			if i%7 == 0 {
+				name = "Zed"
+			}
+			users = append(users, map[string]any{"sourcedId": fmt.Sprintf("u%03d", i), "givenName": name})
+		}
+		if users == nil {
+			users = []any{}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"users": users})
+	})
+	return httptest.NewServer(mux)
+}
+
+func TestFetchAllPagesAndSearch(t *testing.T) {
+	srv := pagedServer(t, 23)
+	defer srv.Close()
+	a := newTestApp(t, srv)
+	selectResource(t, a, "users")
+	press(t, a, "e")
+	a.top().(*requestScreen).form.set("q:limit", "5")
+	press(t, a, "enter")
+	cs := a.top().(*collectionScreen)
+	if len(cs.resp.Items) != 5 {
+		t.Fatalf("page 1 items = %d", len(cs.resp.Items))
+	}
+
+	// Search on one page, then ctrl+a to search across all pages.
+	press(t, a, "/")
+	typeText(t, a, "zed")
+	if len(cs.filtered) != 1 {
+		t.Fatalf("page-1 matches = %d", len(cs.filtered))
+	}
+	press(t, a, "ctrl+a")
+	all, ok := a.top().(*collectionScreen)
+	if !ok || !all.allPages {
+		t.Fatalf("expected aggregated collection, top=%T status=%q", a.top(), a.status)
+	}
+	if len(all.resp.Items) != 23 || all.pages != 5 {
+		t.Errorf("items=%d pages=%d", len(all.resp.Items), all.pages)
+	}
+	if all.search.Value() != "zed" || len(all.filtered) != 4 { // 0,7,14,21
+		t.Errorf("search=%q matches=%d", all.search.Value(), len(all.filtered))
+	}
+	if a.Depth() != 2 {
+		t.Errorf("should replace in place, depth=%d", a.Depth())
+	}
+	if !strings.Contains(a.status, "23 records from 5 page(s)") {
+		t.Errorf("status = %q", a.status)
+	}
+	view := a.View()
+	if !strings.Contains(view, "4 of 23 items") || !strings.Contains(view, "all pages (5 × 5)") {
+		t.Errorf("view:\n%s", view)
+	}
+	// Paging is a no-op now; raw viewer shows the combined body.
+	press(t, a, "n")
+	if !strings.Contains(a.status, "already loaded") || a.top() != all {
+		t.Errorf("status=%q", a.status)
+	}
+	press(t, a, "r")
+	if rs, ok := a.top().(*rawScreen); !ok || strings.Count(rs.text, `"sourcedId"`) != 23 {
+		t.Errorf("raw should contain all records")
+	}
+	press(t, a, "esc")
+	// Selecting a filtered row maps to the right record.
+	press(t, a, "esc") // clear search
+	press(t, a, "G")
+	if it, _ := all.selected(); it["sourcedId"] != "u022" {
+		t.Errorf("last record = %v", it)
+	}
+
+	// 'A' from the table with a fresh page-1 view; and cancellation mid-walk.
+	press(t, a, "R")
+	cs = a.top().(*collectionScreen)
+	if cs.allPages {
+		t.Fatal("reload should return to single page")
+	}
+	_, cmd := a.Update(key("A"))
+	if a.agg == nil || a.loading == "" {
+		t.Fatal("expected aggregation in progress")
+	}
+	// Deliver the first page, then cancel before the second.
+	_, cmd = a.Update(cmd())
+	if a.agg == nil || a.agg.pages != 1 || !strings.Contains(a.loading, "page 2") {
+		t.Fatalf("after page 1: agg=%+v loading=%q", a.agg, a.loading)
+	}
+	press(t, a, "esc")
+	if a.agg != nil || a.loading != "" || !strings.Contains(a.status, "cancelled after 1 page") {
+		t.Errorf("cancel: agg=%v loading=%q status=%q", a.agg, a.loading, a.status)
+	}
+	if a.top() != cs {
+		t.Error("cancel should keep the original screen")
+	}
+	// The stale page-2 result (if it arrived) is dropped.
+	_, _ = a.Update(cmd())
+	if a.top() != cs {
+		t.Error("stale result should be ignored")
+	}
+	_ = cmd
 }

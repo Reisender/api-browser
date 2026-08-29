@@ -101,6 +101,10 @@ type collectionScreen struct {
 	search    textinput.Model
 	searching bool
 	filtered  []int
+
+	// allPages is set when resp.Items is the concatenation of every page.
+	allPages bool
+	pages    int
 }
 
 func newCollectionScreen(a *App, name string, res *spec.Resource, req client.Request, resp *client.Response) *collectionScreen {
@@ -253,6 +257,9 @@ func (s *collectionScreen) page(a *App, delta int) tea.Cmd {
 	if pg == nil {
 		return setStatus("this API spec has no paging configured", true)
 	}
+	if s.allPages {
+		return setStatus(fmt.Sprintf("all %d pages are already loaded (R reloads page 1)", s.pages), false)
+	}
 	limit, _ := strconv.Atoi(s.req.Query[pg.LimitParam])
 	if limit <= 0 {
 		limit = pg.DefaultLimit
@@ -282,11 +289,16 @@ func (s *collectionScreen) update(a *App, msg tea.Msg) tea.Cmd {
 				s.searching = false
 				s.search.Blur()
 				return nil
+			case "ctrl+a":
+				s.searching = false
+				s.search.Blur()
+				return a.fetchAllPages(s)
 			case "esc":
 				s.searching = false
 				s.search.Blur()
 				s.search.SetValue("")
 				s.applySearch()
+				s.rebuild(s.table.Width())
 				return nil
 			}
 		}
@@ -305,7 +317,7 @@ func (s *collectionScreen) update(a *App, msg tea.Msg) tea.Cmd {
 			if s.search.Value() != "" {
 				s.search.SetValue("")
 				s.applySearch()
-				return nil
+				s.rebuild(s.table.Width())
 			}
 			return nil
 		case "enter":
@@ -331,6 +343,8 @@ func (s *collectionScreen) update(a *App, msg tea.Msg) tea.Cmd {
 		case "s":
 			a.push(newQuickParamScreen(a, s, "sort", "Field to sort by (orderBy=asc|desc is set separately with e)"))
 			return nil
+		case "A":
+			return a.fetchAllPages(s)
 		case "L":
 			if pg := a.spec.Paging; pg != nil {
 				a.push(newQuickParamScreen(a, s, pg.LimitParam, "Records per page (e.g. 1000). Offset resets to 0."))
@@ -378,6 +392,9 @@ func (s *collectionScreen) view(a *App, w, h int) string {
 			lim = "(server default)"
 		}
 		pg = fmt.Sprintf("  offset %s  limit %s %s", off, lim, styleDim.Render("[L to change]"))
+		if s.allPages {
+			pg = fmt.Sprintf("  all pages (%d × %s)", s.pages, lim)
+		}
 	}
 	q := ""
 	if f := s.req.Query["filter"]; f != "" {
@@ -392,8 +409,12 @@ func (s *collectionScreen) view(a *App, w, h int) string {
 	}
 	hdr := styleDim.Render(count + pg + q)
 	if s.searching || s.search.Value() != "" {
-		s.search.Width = max(10, w-lipgloss.Width(hdr)-6)
-		hdr += "   " + s.search.View()
+		hint := ""
+		if s.searching && !s.allPages {
+			hint = styleDim.Render("  ctrl+a: search all pages")
+		}
+		s.search.Width = max(10, w-lipgloss.Width(hdr)-lipgloss.Width(hint)-6)
+		hdr += "   " + s.search.View() + hint
 	}
 	if len(s.resp.Items) == 0 {
 		return hdr + "\n\n" + styleDim.Render("  (empty result)")
@@ -405,7 +426,7 @@ func (s *collectionScreen) view(a *App, w, h int) string {
 }
 
 func (s *collectionScreen) help() []helpEntry {
-	return []helpEntry{{"enter", "open item"}, {"/", "search rows"}, {"n/p", "next / prev page"}, {"f", "server filter"}, {"s", "set sort"}, {"L", "page size"}, {"e", "edit all params"}, {"r", "raw JSON"}, {"u", "show URL"}, {"y", "copy id"}, {"R", "reload"}, {"g/G", "top / bottom"}}
+	return []helpEntry{{"enter", "open item"}, {"/", "search rows"}, {"A", "fetch all pages"}, {"n/p", "next / prev page"}, {"f", "server filter"}, {"s", "set sort"}, {"L", "page size"}, {"e", "edit all params"}, {"r", "raw JSON"}, {"u", "show URL"}, {"y", "copy id"}, {"R", "reload"}, {"g/G", "top / bottom"}}
 }
 
 // --------------------------------------------------------------------- item

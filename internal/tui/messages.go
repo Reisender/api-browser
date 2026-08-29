@@ -28,6 +28,23 @@ type fetchMsg struct {
 	resp     *client.Response
 }
 
+// aggregate tracks an in-progress "fetch all pages" walk.
+type aggregate struct {
+	name     string
+	resource *spec.Resource
+	req      client.Request // request for the *next* page
+	limit    int
+	items    []map[string]any
+	pages    int
+	search   string
+	url      string
+	status   int
+	duration time.Duration
+}
+
+// maxAggregatePages bounds a fetch-all walk so a bad server can't run forever.
+const maxAggregatePages = 1000
+
 // statusMsg updates the transient status line.
 type statusMsg struct {
 	text string
