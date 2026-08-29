@@ -188,8 +188,10 @@ func (a *App) handleFetch(m fetchMsg) tea.Cmd {
 		s = newCollectionScreen(a, title, m.resource, m.req, resp)
 		if replace {
 			if old, ok := a.top().(*collectionScreen); ok {
-				cur := old.table.Cursor()
-				s.(*collectionScreen).table.SetCursor(cur)
+				ns := s.(*collectionScreen)
+				ns.search.SetValue(old.search.Value())
+				ns.applySearch()
+				ns.table.SetCursor(old.table.Cursor())
 				a.pop()
 			}
 		}
@@ -238,6 +240,12 @@ func (a *App) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 	case "esc":
+		if inForm && isSearchingCollection(top) {
+			break // let the collection close its search box
+		}
+		if cs, ok := top.(*collectionScreen); ok && cs.search.Value() != "" {
+			break // first esc clears an applied search
+		}
 		if len(a.stack) == 1 {
 			return a, nil
 		}
@@ -272,11 +280,18 @@ func (a *App) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func isForm(s screen) bool {
-	switch s.(type) {
+	switch x := s.(type) {
 	case *requestScreen, *connectionScreen, *quickParamScreen:
 		return true
+	case *collectionScreen:
+		return x.searching
 	}
 	return false
+}
+
+func isSearchingCollection(s screen) bool {
+	cs, ok := s.(*collectionScreen)
+	return ok && cs.searching
 }
 
 func isFiltering(s screen) bool {

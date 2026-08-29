@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -95,6 +96,11 @@ type collectionScreen struct {
 	resp     *client.Response
 	table    table.Model
 	cols     []string
+
+	// Local search: filtered is the index into resp.Items of each visible row.
+	search    textinput.Model
+	searching bool
+	filtered  []int
 }
 
 func newCollectionScreen(a *App, name string, res *spec.Resource, req client.Request, resp *client.Response) *collectionScreen {
@@ -105,8 +111,36 @@ func newCollectionScreen(a *App, name string, res *spec.Resource, req client.Req
 	st.Header = st.Header.Bold(true).Foreground(colKey).BorderStyle(lipgloss.NormalBorder()).BorderBottom(true).BorderForeground(colDim)
 	st.Selected = st.Selected.Foreground(lipgloss.Color("230")).Background(colAccent).Bold(false)
 	s.table.SetStyles(st)
+	s.search = textinput.New()
+	s.search.Prompt = "/"
+	s.search.Placeholder = "search rows"
+	s.search.Cursor.SetMode(cursorMode)
+	s.applySearch()
 	s.rebuild(80)
 	return s
+}
+
+// applySearch recomputes the visible row set from the search text. Rows match
+// when any cell (or the raw JSON of the record) contains the query,
+// case-insensitively; multiple space-separated words must all match.
+func (s *collectionScreen) applySearch() {
+	words := strings.Fields(strings.ToLower(s.search.Value()))
+	s.filtered = s.filtered[:0]
+	for i, it := range s.resp.Items {
+		if len(words) == 0 || rowMatches(it, words) {
+			s.filtered = append(s.filtered, i)
+		}
+	}
+}
+
+func rowMatches(it map[string]any, words []string) bool {
+	hay := strings.ToLower(jsontree.Summary(it, 1<<20))
+	for _, w := range words {
+		if !strings.Contains(hay, w) {
+			return false
+		}
+	}
+	return true
 }
 
 // pickColumns chooses table columns: spec columns present in the data, then
@@ -157,8 +191,9 @@ func (s *collectionScreen) rebuild(width int) {
 	for i, c := range s.cols {
 		widths[i] = len(c)
 	}
-	rows := make([]table.Row, 0, len(s.resp.Items))
-	for _, it := range s.resp.Items {
+	rows := make([]table.Row, 0, len(s.filtered))
+	for _, idx := range s.filtered {
+		it := s.resp.Items[idx]
 		row := make(table.Row, len(s.cols))
 		for i, c := range s.cols {
 			v := cell(it[c])
@@ -183,12 +218,10 @@ func (s *collectionScreen) rebuild(width int) {
 		w = min(w, 48)
 		cols[i] = table.Column{Title: c, Width: w}
 	}
-	cur := s.table.Cursor()
+	cur := max(0, s.table.Cursor())
 	s.table.SetColumns(cols)
 	s.table.SetRows(rows)
-	if cur < len(rows) {
-		s.table.SetCursor(cur)
-	}
+	s.table.SetCursor(min(cur, max(0, len(rows)-1)))
 }
 
 func cell(v any) string {
@@ -208,11 +241,11 @@ func cell(v any) string {
 func (s *collectionScreen) title() string { return s.name }
 
 func (s *collectionScreen) selected() (map[string]any, bool) {
-	i := s.table.Cursor()
-	if i < 0 || i >= len(s.resp.Items) {
+	i := max(0, s.table.Cursor())
+	if i >= len(s.filtered) {
 		return nil, false
 	}
-	return s.resp.Items[i], true
+	return s.resp.Items[s.filtered[i]], true
 }
 
 func (s *collectionScreen) page(a *App, delta int) tea.Cmd {
@@ -242,8 +275,39 @@ func (s *collectionScreen) page(a *App, delta int) tea.Cmd {
 }
 
 func (s *collectionScreen) update(a *App, msg tea.Msg) tea.Cmd {
+	if s.searching {
+		if k, ok := msg.(tea.KeyMsg); ok {
+			switch k.String() {
+			case "enter":
+				s.searching = false
+				s.search.Blur()
+				return nil
+			case "esc":
+				s.searching = false
+				s.search.Blur()
+				s.search.SetValue("")
+				s.applySearch()
+				return nil
+			}
+		}
+		var cmd tea.Cmd
+		s.search, cmd = s.search.Update(msg)
+		s.applySearch()
+		s.rebuild(s.table.Width())
+		return cmd
+	}
 	if k, ok := msg.(tea.KeyMsg); ok {
 		switch k.String() {
+		case "/":
+			s.searching = true
+			return s.search.Focus()
+		case "esc":
+			if s.search.Value() != "" {
+				s.search.SetValue("")
+				s.applySearch()
+				return nil
+			}
+			return nil
 		case "enter":
 			it, ok := s.selected()
 			if !ok {
@@ -313,15 +377,26 @@ func (s *collectionScreen) view(a *App, w, h int) string {
 	if so := s.req.Query["sort"]; so != "" {
 		q += "  sort=" + so
 	}
-	hdr := styleDim.Render(fmt.Sprintf("%d items%s%s", len(s.resp.Items), pg, q))
+	count := fmt.Sprintf("%d items", len(s.resp.Items))
+	if s.search.Value() != "" {
+		count = fmt.Sprintf("%d of %d items", len(s.filtered), len(s.resp.Items))
+	}
+	hdr := styleDim.Render(count + pg + q)
+	if s.searching || s.search.Value() != "" {
+		s.search.Width = max(10, w-lipgloss.Width(hdr)-6)
+		hdr += "   " + s.search.View()
+	}
 	if len(s.resp.Items) == 0 {
 		return hdr + "\n\n" + styleDim.Render("  (empty result)")
+	}
+	if len(s.filtered) == 0 {
+		return hdr + "\n\n" + styleDim.Render("  (no rows match)")
 	}
 	return hdr + "\n" + s.table.View()
 }
 
 func (s *collectionScreen) help() []helpEntry {
-	return []helpEntry{{"enter", "open item"}, {"n/p", "next / prev page"}, {"f", "set filter"}, {"s", "set sort"}, {"e", "edit all params"}, {"r", "raw JSON"}, {"u", "show URL"}, {"y", "copy id"}, {"R", "reload"}, {"g/G", "top / bottom"}}
+	return []helpEntry{{"enter", "open item"}, {"/", "search rows"}, {"n/p", "next / prev page"}, {"f", "server filter"}, {"s", "set sort"}, {"e", "edit all params"}, {"r", "raw JSON"}, {"u", "show URL"}, {"y", "copy id"}, {"R", "reload"}, {"g/G", "top / bottom"}}
 }
 
 // --------------------------------------------------------------------- item

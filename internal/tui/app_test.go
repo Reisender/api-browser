@@ -503,3 +503,82 @@ func TestPickColumns(t *testing.T) {
 		t.Errorf("no items -> nil cols, got %v", got)
 	}
 }
+
+func TestCollectionSearch(t *testing.T) {
+	srv := server(t)
+	defer srv.Close()
+	a := newTestApp(t, srv)
+	selectResource(t, a, "classes")
+	press(t, a, "enter")
+	cs := a.top().(*collectionScreen)
+	if len(cs.filtered) != 2 {
+		t.Fatalf("filtered = %v", cs.filtered)
+	}
+
+	// "/" opens live search; typing narrows immediately.
+	press(t, a, "/")
+	if !cs.searching {
+		t.Fatal("expected searching")
+	}
+	typeText(t, a, "ar")
+	if len(cs.filtered) != 1 || cs.resp.Items[cs.filtered[0]]["title"] != "Art" {
+		t.Errorf("filtered = %v", cs.filtered)
+	}
+	view := a.View()
+	if !strings.Contains(view, "1 of 2 items") || !strings.Contains(view, "/ar") || strings.Contains(view, "Math") {
+		t.Errorf("view:\n%s", view)
+	}
+	// Case-insensitive, multi-word AND, matches nested/any field.
+	cs.search.SetValue("ACTIVE math")
+	cs.applySearch()
+	if len(cs.filtered) != 1 || cs.resp.Items[cs.filtered[0]]["title"] != "Math" {
+		t.Errorf("multi-word filtered = %v", cs.filtered)
+	}
+	cs.search.SetValue("zzz")
+	cs.applySearch()
+	if len(cs.filtered) != 0 || !strings.Contains(a.View(), "no rows match") {
+		t.Errorf("expected no match, filtered=%v", cs.filtered)
+	}
+	cs.search.SetValue("ar")
+	cs.applySearch()
+
+	// Enter keeps the filter and returns focus to the table; keys work again.
+	press(t, a, "enter")
+	if cs.searching || a.top() != cs {
+		t.Fatalf("enter should close search box; searching=%v top=%T", cs.searching, a.top())
+	}
+	// Opening the selected row resolves to the *filtered* record (Art = c2 -> 404 on server,
+	// so check the request rather than the response).
+	if it, ok := cs.selected(); !ok || it["sourcedId"] != "c2" {
+		t.Errorf("selected = %v", it)
+	}
+	// Paging/reload preserves the search text.
+	press(t, a, "R")
+	cs = a.top().(*collectionScreen)
+	if cs.search.Value() != "ar" || len(cs.filtered) != 1 {
+		t.Errorf("reload lost search: %q %v", cs.search.Value(), cs.filtered)
+	}
+	// First esc clears the search, second esc goes back.
+	press(t, a, "esc")
+	if cs.search.Value() != "" || len(cs.filtered) != 2 || a.Depth() != 2 {
+		t.Errorf("esc should clear search: %q depth=%d", cs.search.Value(), a.Depth())
+	}
+	press(t, a, "esc")
+	if a.Depth() != 1 {
+		t.Errorf("second esc should pop, depth=%d", a.Depth())
+	}
+
+	// Esc while typing cancels and clears.
+	selectResource(t, a, "classes")
+	press(t, a, "enter")
+	cs = a.top().(*collectionScreen)
+	press(t, a, "/")
+	typeText(t, a, "q") // 'q' must be typed, not treated as quit/back
+	if a.Depth() != 2 || cs.search.Value() != "q" {
+		t.Fatalf("q inside search box should type; depth=%d value=%q", a.Depth(), cs.search.Value())
+	}
+	press(t, a, "esc")
+	if cs.searching || cs.search.Value() != "" || len(cs.filtered) != 2 || a.Depth() != 2 {
+		t.Errorf("esc in search: searching=%v value=%q filtered=%v depth=%d", cs.searching, cs.search.Value(), cs.filtered, a.Depth())
+	}
+}

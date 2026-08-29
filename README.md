@@ -60,10 +60,16 @@ Flags override profile values, so `-profile district -token X` swaps the token.
 | Screen | Keys |
 |---|---|
 | Resources | `enter` list · `e` edit params before running · `/` filter list |
-| Collection | `enter` open item · `n`/`p` next/prev page · `f` filter · `s` sort · `e` edit all params · `r` raw JSON · `u` show URL · `y` copy id · `R` reload |
+| Collection | `enter` open item · `/` live search rows · `n`/`p` next/prev page · `f` server filter · `s` sort · `e` edit all params · `r` raw JSON · `u` show URL · `y` copy id · `R` reload |
 | Item | `enter` follow reference / toggle node · `l` related sub-collections · `←`/`→` collapse/expand · `+`/`-` expand/collapse all · `r` raw · `y` copy value |
 | Raw | scroll · `y` copy JSON |
 | Everywhere | `esc`/`backspace` back · `H` home · `a` connection · `?` help · `q` back/quit · `ctrl+c` quit |
+
+`/` on a collection opens a live search box: rows narrow as you type (any
+field, case-insensitive, space-separated words must all match). `enter` keeps
+the filter and returns to the table, `esc` clears it. The search survives
+paging and reloads. This filters the page you already fetched; `f` sends a
+server-side `filter=` expression instead.
 
 References are detected generically: any object carrying the spec's id field
 plus a `type` (e.g. `{"sourcedId": "o1", "type": "org", "href": …}`) is
