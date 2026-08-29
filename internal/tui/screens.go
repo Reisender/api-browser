@@ -440,6 +440,12 @@ type itemScreen struct {
 	rows     []jsontree.Node
 	cursor   int
 	offset   int
+
+	// jsonMode shows the record as pretty JSON instead of the tree.
+	jsonMode bool
+	jsonText string
+	jsonVP   viewport.Model
+	jsonInit bool
 }
 
 func newItemScreen(a *App, name string, res *spec.Resource, req client.Request, resp *client.Response) *itemScreen {
@@ -449,6 +455,7 @@ func newItemScreen(a *App, name string, res *spec.Resource, req client.Request, 
 	}
 	s := &itemScreen{name: name, resource: res, req: req, resp: resp, tree: jsontree.New(root)}
 	s.rows = s.tree.Rows()
+	s.jsonText = prettyJSON(root)
 	return s
 }
 
@@ -498,8 +505,35 @@ func (s *itemScreen) update(a *App, msg tea.Msg) tea.Cmd {
 	if !ok {
 		return nil
 	}
+	if s.jsonMode {
+		switch k.String() {
+		case "t":
+			s.jsonMode = false
+			return nil
+		case "y":
+			return a.copyText(s.jsonText)
+		case "l":
+			return s.related(a)
+		case "r":
+			a.push(newRawScreen(s.name+" (raw)", s.resp))
+			return nil
+		case "u":
+			return setStatus(s.resp.URL, false)
+		case "R":
+			if s.resource != nil && s.req.Path != "" {
+				return a.replaceItem(s.resource, s.req, s.name)
+			}
+			return nil
+		}
+		var cmd tea.Cmd
+		s.jsonVP, cmd = s.jsonVP.Update(msg)
+		return cmd
+	}
 	n, has := s.current()
 	switch k.String() {
+	case "t":
+		s.jsonMode = true
+		return nil
 	case "up", "k":
 		if s.cursor > 0 {
 			s.cursor--
@@ -571,6 +605,9 @@ func (s *itemScreen) update(a *App, msg tea.Msg) tea.Cmd {
 }
 
 func (s *itemScreen) view(a *App, w, h int) string {
+	if s.jsonMode {
+		return s.jsonView(a, w, h)
+	}
 	if len(s.rows) == 0 {
 		return styleDim.Render("(empty)")
 	}
@@ -590,7 +627,7 @@ func (s *itemScreen) view(a *App, w, h int) string {
 	if s.resource != nil && len(s.resource.Related) > 0 {
 		rel = fmt.Sprintf("  %d related (l)", len(s.resource.Related))
 	}
-	b.WriteString(styleDim.Render(fmt.Sprintf("%s  %d fields%s", id, len(s.rows), rel)) + "\n")
+	b.WriteString(styleDim.Render(fmt.Sprintf("%s  %d fields%s  (t: JSON view)", id, len(s.rows), rel)) + "\n")
 	for i := s.offset; i < len(s.rows) && i < s.offset+body; i++ {
 		n := s.rows[i]
 		indent := strings.Repeat("  ", n.Depth)
@@ -623,8 +660,28 @@ func (s *itemScreen) view(a *App, w, h int) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
+func (s *itemScreen) jsonView(a *App, w, h int) string {
+	if !s.jsonInit || s.jsonVP.Width != w || s.jsonVP.Height != h-1 {
+		off := s.jsonVP.YOffset
+		s.jsonVP = viewport.New(w, h-1)
+		s.jsonVP.SetContent(highlightJSON(s.jsonText))
+		s.jsonVP.SetYOffset(off)
+		s.jsonInit = true
+	}
+	id := ""
+	if s.resp.Item != nil {
+		id = client.ItemID(a.spec, s.resp.Item)
+	}
+	lines := strings.Count(s.jsonText, "\n") + 1
+	hdr := styleDim.Render(fmt.Sprintf("%s  JSON  %d lines  %d%%  (t: tree view)", id, lines, int(s.jsonVP.ScrollPercent()*100)))
+	return hdr + "\n" + s.jsonVP.View()
+}
+
 func (s *itemScreen) help() []helpEntry {
-	return []helpEntry{{"enter", "follow reference / toggle"}, {"l", "related collections"}, {"←/→", "collapse / expand"}, {"+/-", "expand / collapse all"}, {"r", "raw JSON"}, {"y", "copy value"}, {"u", "show URL"}, {"R", "reload"}}
+	if s.jsonMode {
+		return []helpEntry{{"t", "tree view"}, {"↑/↓ pgup/pgdn", "scroll"}, {"y", "copy JSON"}, {"l", "related collections"}, {"r", "raw response"}, {"u", "show URL"}}
+	}
+	return []helpEntry{{"enter", "follow reference / toggle"}, {"t", "JSON view"}, {"l", "related collections"}, {"←/→", "collapse / expand"}, {"+/-", "expand / collapse all"}, {"r", "raw JSON"}, {"y", "copy value"}, {"u", "show URL"}, {"R", "reload"}}
 }
 
 // ---------------------------------------------------------------------- raw

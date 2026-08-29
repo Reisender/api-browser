@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -803,5 +804,73 @@ func TestBrowseOpenAPIInferredSpec(t *testing.T) {
 	press(t, a, "l", "enter")
 	if v, ok := a.top().(*collectionScreen); !ok || len(v.resp.Items) != 1 || v.resp.Items[0]["date"] != "2026-01-01" {
 		t.Fatalf("related: top=%T status=%q", a.top(), a.status)
+	}
+}
+
+func TestItemJSONToggle(t *testing.T) {
+	srv := server(t)
+	defer srv.Close()
+	a := newTestApp(t, srv)
+	selectResource(t, a, "classes")
+	press(t, a, "enter", "enter")
+	is, ok := a.top().(*itemScreen)
+	if !ok {
+		t.Fatalf("top=%T", a.top())
+	}
+	if !strings.Contains(a.View(), "t: JSON view") {
+		t.Error("tree header should hint at JSON view")
+	}
+	press(t, a, "t")
+	if !is.jsonMode {
+		t.Fatal("expected json mode")
+	}
+	view := a.View()
+	// The record itself (not the {"class": ...} wrapper), pretty printed, with keys sorted by encoding/json.
+	for _, want := range []string{"JSON", `"sourcedId": "c1"`, `"title": "Math"`, `"type": "course"`, "t: tree view"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("json view missing %q:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, `"class": {`) {
+		t.Error("json view should show the record, not the response wrapper")
+	}
+	if !strings.HasPrefix(is.jsonText, "{\n  \"course\": {\n    \"href\": \"x\"") {
+		t.Errorf("jsonText = %q", is.jsonText)
+	}
+	// y copies the record JSON; navigation keys don't fall through to the tree.
+	var copied string
+	copyToClipboard = func(s string) error { copied = s; return nil }
+	press(t, a, "y")
+	if copied != is.jsonText {
+		t.Error("y should copy record JSON")
+	}
+	before := is.cursor
+	press(t, a, "down")
+	if is.cursor != before {
+		t.Error("down in json mode must not move the tree cursor")
+	}
+	// l still opens related from JSON mode.
+	press(t, a, "l")
+	if _, ok := a.top().(*menuScreen); !ok {
+		t.Fatalf("l in json mode: top=%T", a.top())
+	}
+	press(t, a, "esc")
+	// Toggle back.
+	press(t, a, "t")
+	if is.jsonMode || !strings.Contains(a.View(), "fields") {
+		t.Error("expected tree view again")
+	}
+}
+
+func TestHighlightJSON(t *testing.T) {
+	src := "{\n  \"a\": \"x\",\n  \"n\": -1.5e3,\n  \"b\": true,\n  \"z\": null\n}"
+	out := highlightJSON(src)
+	// Styling must not alter the text content.
+	plain := regexp.MustCompile("\x1b\\[[0-9;]*m").ReplaceAllString(out, "")
+	if plain != src {
+		t.Errorf("highlight changed text:\n%q\n%q", plain, src)
+	}
+	if prettyJSON(map[string]any{"k": 1}) != "{\n  \"k\": 1\n}" {
+		t.Errorf("prettyJSON = %q", prettyJSON(map[string]any{"k": 1}))
 	}
 }

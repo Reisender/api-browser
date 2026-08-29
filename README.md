@@ -71,7 +71,7 @@ Flags override profile values, so `-profile district -token X` swaps the token.
 |---|---|
 | Resources | `enter` list · `e` edit params before running · `/` filter list |
 | Collection | `enter` open item · `/` live search rows · `A` fetch all pages · `n`/`p` next/prev page · `f` server filter · `s` sort · `L` page size · `e` edit all params · `r` raw JSON · `u` show URL · `y` copy id · `R` reload |
-| Item | `enter` follow reference / toggle node · `l` related sub-collections · `←`/`→` collapse/expand · `+`/`-` expand/collapse all · `r` raw · `y` copy value |
+| Item | `enter` follow reference / toggle node · `t` toggle tree / pretty JSON · `l` related sub-collections · `←`/`→` collapse/expand · `+`/`-` expand/collapse all · `r` raw · `y` copy value |
 | Raw | scroll · `y` copy JSON |
 | Everywhere | `esc`/`backspace` back · `H` home · `a` connection · `?` help · `q` back/quit · `ctrl+c` quit |
 
@@ -93,6 +93,11 @@ on the table). The browser walks `offset`/`limit` until the server returns a
 short page, showing progress in the footer (`esc` cancels and keeps what you
 had), then shows the combined result with your search applied. The header
 reads `all pages (12 × 100)`; `n`/`p` are no-ops until you `R`eload.
+
+On an item, `t` toggles between the collapsible tree and a syntax-highlighted
+pretty-JSON view of the record itself (without the response wrapper). Scroll
+with the arrow keys, `y` copies the JSON; `l`, `r`, `u` and `R` work in both
+views.
 
 References are detected generically: any object carrying the spec's id field
 plus a `type` (e.g. `{"sourcedId": "o1", "type": "org", "href": …}`) is
