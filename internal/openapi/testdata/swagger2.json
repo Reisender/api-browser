@@ -1,0 +1,19 @@
+{
+  "swagger": "2.0",
+  "info": {"title": "Legacy", "version": "2"},
+  "basePath": "/v2",
+  "paths": {
+    "/widgets": {
+      "get": {
+        "parameters": [{"name": "per_page", "in": "query", "type": "integer", "default": 50}, {"name": "offset", "in": "query", "type": "integer"}],
+        "responses": {"200": {"description": "ok", "schema": {"type": "array", "items": {"$ref": "#/definitions/Widget"}}}}
+      }
+    },
+    "/widgets/{id}": {
+      "get": {"responses": {"200": {"description": "ok", "schema": {"$ref": "#/definitions/Widget"}}}}
+    }
+  },
+  "definitions": {
+    "Widget": {"type": "object", "properties": {"id": {"type": "integer"}, "label": {"type": "string"}}}
+  }
+}

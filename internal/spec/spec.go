@@ -24,8 +24,8 @@ var builtin embed.FS
 // Param describes a query parameter accepted by an endpoint.
 type Param struct {
 	Name        string `yaml:"name"`
-	Description string `yaml:"description"`
-	Default     string `yaml:"default"`
+	Description string `yaml:"description,omitempty"`
+	Default     string `yaml:"default,omitempty"`
 }
 
 // Related describes a sub-collection reachable from a single item, e.g.
@@ -33,34 +33,33 @@ type Param struct {
 type Related struct {
 	Name     string `yaml:"name"`
 	Path     string `yaml:"path"`
-	ListKey  string `yaml:"listKey"`
-	Resource string `yaml:"resource"` // resource the returned items belong to
+	ListKey  string `yaml:"listKey,omitempty"`
+	Resource string `yaml:"resource,omitempty"` // resource the returned items belong to
 }
 
 // Resource is a top-level collection in the API.
 type Resource struct {
 	Name        string    `yaml:"name"`
-	Description string    `yaml:"description"`
+	Description string    `yaml:"description,omitempty"`
 	ListPath    string    `yaml:"listPath"`
-	ItemPath    string    `yaml:"itemPath"`
-	ListKey     string    `yaml:"listKey"`
-	ItemKey     string    `yaml:"itemKey"`
-	Columns     []string  `yaml:"columns"`
-	Related     []Related `yaml:"related"`
+	ItemPath    string    `yaml:"itemPath,omitempty"`
+	ListKey     string    `yaml:"listKey,omitempty"`
+	ItemKey     string    `yaml:"itemKey,omitempty"`
+	Columns     []string  `yaml:"columns,omitempty,flow"`
+	Related     []Related `yaml:"related,omitempty"`
 }
 
 // Spec is a full API description.
 type Spec struct {
-	Name        string            `yaml:"name"`
-	Description string            `yaml:"description"`
-	BasePath    string            `yaml:"basePath"`
-	IDField     string            `yaml:"idField"`
-	QueryParams []Param           `yaml:"queryParams"`
-	RefTypes    map[string]string `yaml:"refTypes"` // ref "type" value -> resource name
-	Resources   []Resource        `yaml:"resources"`
-
+	Name        string `yaml:"name"`
+	Description string `yaml:"description,omitempty"`
+	BasePath    string `yaml:"basePath,omitempty"`
+	IDField     string `yaml:"idField,omitempty"`
 	// Paging describes how offset/limit paging is expressed, if at all.
-	Paging *Paging `yaml:"paging"`
+	Paging      *Paging           `yaml:"paging,omitempty"`
+	QueryParams []Param           `yaml:"queryParams,omitempty"`
+	RefTypes    map[string]string `yaml:"refTypes,omitempty"` // ref "type" value -> resource name
+	Resources   []Resource        `yaml:"resources"`
 }
 
 // Paging describes offset-based pagination parameters.
@@ -164,6 +163,11 @@ func (s *Spec) Validate() error {
 		}
 	}
 	return nil
+}
+
+// Marshal renders the spec as native YAML (e.g. for -dump-spec).
+func (s *Spec) Marshal() ([]byte, error) {
+	return yaml.Marshal(s)
 }
 
 // Resource looks up a resource by name.

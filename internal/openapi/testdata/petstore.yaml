@@ -1,0 +1,110 @@
+openapi: 3.0.3
+info:
+  title: Pet Store
+  version: 1.0.0
+  description: |
+    A store for pets.
+    Second line is ignored.
+servers:
+  - url: https://petstore.example.com/api/v3
+paths:
+  /pets:
+    get:
+      summary: List all pets
+      parameters:
+        - name: limit
+          in: query
+          description: How many items to return
+          schema: {type: integer, default: 20}
+        - name: offset
+          in: query
+          schema: {type: integer}
+        - name: status
+          in: query
+          schema: {type: string}
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/Pet"}
+    post:
+      responses: {"201": {description: created}}
+  /pets/{petId}:
+    parameters:
+      - name: petId
+        in: path
+        required: true
+        schema: {type: string}
+    get:
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Pet"}
+  /pets/{petId}/visits:
+    get:
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/Visit"}
+  /owners:
+    get:
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: {type: integer}
+                  owners:
+                    type: array
+                    items: {$ref: "#/components/schemas/Owner"}
+  /owners/{ownerId}:
+    get:
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Owner"}
+  /health:
+    get:
+      responses:
+        "200": {description: ok}
+components:
+  schemas:
+    Base:
+      type: object
+      properties:
+        id: {type: string}
+        createdAt: {type: string}
+    Pet:
+      allOf:
+        - $ref: "#/components/schemas/Base"
+        - type: object
+          properties:
+            name: {type: string}
+            status: {type: string}
+            tags: {type: array, items: {type: string}}
+            owner: {$ref: "#/components/schemas/OwnerRef"}
+    OwnerRef:
+      type: object
+      properties:
+        id: {type: string}
+        type: {type: string}
+    Owner:
+      type: object
+      properties:
+        id: {type: string}
+        fullName: {type: string}
+        email: {type: string}
+    Visit:
+      type: object
+      properties:
+        id: {type: string}
+        date: {type: string}

@@ -1,0 +1,88 @@
+openapi: 3.0.0
+info: {title: OneRoster, version: v1p1}
+servers:
+  - url: "https://{host}/ims/oneroster/v1p1"
+    variables:
+      host: {default: example.com}
+paths:
+  /users:
+    get:
+      parameters:
+        - {name: limit, in: query, schema: {type: integer, default: 100}}
+        - {name: offset, in: query, schema: {type: integer, default: 0}}
+        - {name: filter, in: query, schema: {type: string}}
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items: {$ref: "#/components/schemas/User"}
+  /users/{sourcedId}:
+    get:
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: {$ref: "#/components/schemas/User"}
+  /classes:
+    get:
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  classes: {type: array, items: {$ref: "#/components/schemas/Class"}}
+  /classes/{sourcedId}:
+    get:
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  class: {$ref: "#/components/schemas/Class"}
+  /classes/{sourcedId}/students:
+    get:
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users: {type: array, items: {$ref: "#/components/schemas/User"}}
+  /schools/{sourcedId}/classes:
+    get:
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  classes: {type: array, items: {$ref: "#/components/schemas/Class"}}
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        sourcedId: {type: string}
+        givenName: {type: string}
+        familyName: {type: string}
+        status: {type: string}
+        orgs: {type: array, items: {type: object}}
+    Class:
+      type: object
+      properties:
+        sourcedId: {type: string}
+        title: {type: string}

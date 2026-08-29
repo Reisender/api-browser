@@ -15,6 +15,7 @@ import (
 
 	"github.com/Reisender/api-browser/internal/auth"
 	"github.com/Reisender/api-browser/internal/config"
+	"github.com/Reisender/api-browser/internal/openapi"
 	"github.com/Reisender/api-browser/internal/spec"
 )
 
@@ -738,4 +739,69 @@ func TestFetchAllPagesAndSearch(t *testing.T) {
 		t.Error("stale result should be ignored")
 	}
 	_ = cmd
+}
+
+func TestBrowseOpenAPIInferredSpec(t *testing.T) {
+	mux := http.NewServeMux()
+	j := func(w http.ResponseWriter, v any) { _ = json.NewEncoder(w).Encode(v) }
+	mux.HandleFunc("/api/v3/pets", func(w http.ResponseWriter, r *http.Request) {
+		j(w, []any{
+			map[string]any{"id": "p1", "name": "Rex", "owner": map[string]any{"id": "o1", "type": "owner"}},
+			map[string]any{"id": "p2", "name": "Tom"},
+		})
+	})
+	mux.HandleFunc("/api/v3/pets/p1", func(w http.ResponseWriter, r *http.Request) {
+		j(w, map[string]any{"id": "p1", "name": "Rex", "owner": map[string]any{"id": "o1", "type": "owner"}})
+	})
+	mux.HandleFunc("/api/v3/owners/o1", func(w http.ResponseWriter, r *http.Request) {
+		j(w, map[string]any{"id": "o1", "fullName": "Jane"})
+	})
+	mux.HandleFunc("/api/v3/pets/p1/visits", func(w http.ResponseWriter, r *http.Request) {
+		j(w, []any{map[string]any{"id": "v1", "date": "2026-01-01"}})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	s, err := openapi.LoadAny("../openapi/testdata/petstore.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := New(s, config.Profile{BaseURL: srv.URL, Spec: "petstore"}, filepath.Join(t.TempDir(), "c.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	selectResource(t, a, "pets")
+	press(t, a, "enter")
+	cs, ok := a.top().(*collectionScreen)
+	if !ok || len(cs.resp.Items) != 2 || cs.cols[0] != "id" || cs.cols[1] != "name" {
+		t.Fatalf("pets: top=%T status=%q", a.top(), a.status)
+	}
+	if !strings.Contains(cs.resp.URL, "/api/v3/pets?limit=20&offset=0") {
+		t.Errorf("url = %s", cs.resp.URL)
+	}
+	press(t, a, "enter")
+	is, ok := a.top().(*itemScreen)
+	if !ok || is.resp.Item["name"] != "Rex" {
+		t.Fatalf("item: top=%T status=%q", a.top(), a.status)
+	}
+	// Follow the owner reference ({id, type} shape).
+	for i, r := range is.rows {
+		if r.Path == "owner" {
+			for j := 0; j < i; j++ {
+				press(t, a, "down")
+			}
+		}
+	}
+	press(t, a, "enter")
+	if o, ok := a.top().(*itemScreen); !ok || o.resp.Item["fullName"] != "Jane" {
+		t.Fatalf("follow ref: top=%T status=%q", a.top(), a.status)
+	}
+	press(t, a, "esc")
+	// Related visits (bare array, unresolved target resource).
+	press(t, a, "l", "enter")
+	if v, ok := a.top().(*collectionScreen); !ok || len(v.resp.Items) != 1 || v.resp.Items[0]["date"] != "2026-01-01" {
+		t.Fatalf("related: top=%T status=%q", a.top(), a.status)
+	}
 }

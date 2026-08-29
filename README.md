@@ -102,6 +102,37 @@ spec, e.g. a class offers `students`, `teachers`, `lineItems`, `results`.
 Error responses (401, 404, …) are surfaced in the status line and their body
 opened in the raw viewer so you can read what the server said.
 
+## Using an OpenAPI / Swagger document
+
+Point `-spec` at any OpenAPI 3.x or Swagger 2 file (YAML or JSON) and the
+browser infers a navigation spec from it:
+
+```sh
+apibrowser -spec ./openapi.yaml -url https://api.example.com
+```
+
+What gets inferred:
+
+- every `GET /things` becomes a resource; `GET /things/{id}` is its item endpoint
+- `GET /things/{id}/others` becomes a *related* link on `things`
+- list/item wrapper keys (`{"users": [...]}` vs a bare array) from the 200 response schema
+- display columns from the item schema's scalar properties (`allOf` is merged)
+- query parameters and their defaults; `limit`/`offset`-style paging is detected
+  (`per_page`, `pageSize`, `skip`, `$top`/`$skip` …)
+- the id field from the item path placeholder, `servers[0].url` for the base path
+
+The heuristics are decent but not perfect. To tune the result, dump the
+inferred spec to native YAML, edit it, and use that instead:
+
+```sh
+apibrowser -spec ./openapi.yaml -dump-spec my-api.yaml
+$EDITOR my-api.yaml          # fix wrapper keys, add refTypes, reorder columns…
+apibrowser -spec my-api.yaml -url https://api.example.com
+```
+
+`-dump-spec -` writes to stdout. It also works on the builtin spec
+(`-spec oneroster-v1p1 -dump-spec -`) as a template.
+
 ## Writing your own spec
 
 Specs are small YAML files (see `internal/spec/specs/oneroster-v1p1.yaml`).
@@ -145,6 +176,7 @@ make lint     # go vet + gofmt
 Layout:
 
 - `internal/spec` – spec model, YAML loading, embedded OneRoster definition
+- `internal/openapi` – infers a spec from OpenAPI 3.x / Swagger 2 documents
 - `internal/auth` – bearer / OAuth2 client-credentials (cached, auto-refresh) / arbitrary header
 - `internal/client` – spec-driven HTTP client, list/item extraction, reference detection
 - `internal/jsontree` – collapsible JSON tree rows

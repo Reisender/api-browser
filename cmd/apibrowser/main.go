@@ -10,13 +10,15 @@ import (
 
 	"github.com/Reisender/api-browser/internal/auth"
 	"github.com/Reisender/api-browser/internal/config"
+	"github.com/Reisender/api-browser/internal/openapi"
 	"github.com/Reisender/api-browser/internal/spec"
 	"github.com/Reisender/api-browser/internal/tui"
 )
 
 func main() {
 	var (
-		specName   = flag.String("spec", "", "builtin spec name or path to a spec YAML (default: profile's spec, else oneroster-v1p1)")
+		specName   = flag.String("spec", "", "builtin spec name, or path to a native spec YAML or an OpenAPI/Swagger document (default: profile's spec, else oneroster-v1p1)")
+		dumpSpec   = flag.String("dump-spec", "", "write the loaded spec (e.g. one inferred from OpenAPI) as native YAML to this file ('-' for stdout) and exit")
 		baseURL    = flag.String("url", "", "API base URL, e.g. https://example.com")
 		profile    = flag.String("profile", "", "saved profile name from the config file")
 		configPath = flag.String("config", config.DefaultPath(), "config file path")
@@ -34,7 +36,7 @@ func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: apibrowser [flags]\n\nExplore a REST API from the terminal.\n\n")
 		flag.PrintDefaults()
-		fmt.Fprintf(os.Stderr, "\nexamples:\n  apibrowser -url https://host -auth bearer -token XYZ\n  apibrowser -url https://host -auth oauth2 -client-id ID -client-secret S -token-url https://host/oauth/token\n  apibrowser -url https://host -auth header -header 'X-Api-Key: abc'\n  apibrowser -profile district\n")
+		fmt.Fprintf(os.Stderr, "\nexamples:\n  apibrowser -url https://host -auth bearer -token XYZ\n  apibrowser -url https://host -auth oauth2 -client-id ID -client-secret S -token-url https://host/oauth/token\n  apibrowser -url https://host -auth header -header 'X-Api-Key: abc'\n  apibrowser -profile district\n  apibrowser -spec ./openapi.yaml -url https://host        # infer navigation from OpenAPI\n  apibrowser -spec ./openapi.yaml -dump-spec my-api.yaml   # save inferred spec to hand-tune\n")
 	}
 	flag.Parse()
 
@@ -122,9 +124,24 @@ func main() {
 		fail(err)
 	}
 
-	s, err := spec.Load(p.Spec)
+	s, err := openapi.LoadAny(p.Spec)
 	if err != nil {
 		fail(err)
+	}
+	if *dumpSpec != "" {
+		out, err := s.Marshal()
+		if err != nil {
+			fail(err)
+		}
+		if *dumpSpec == "-" {
+			os.Stdout.Write(out)
+			return
+		}
+		if err := os.WriteFile(*dumpSpec, out, 0o644); err != nil {
+			fail(err)
+		}
+		fmt.Fprintf(os.Stderr, "wrote %s (%d resources) to %s\n", s.Name, len(s.Resources), *dumpSpec)
+		return
 	}
 
 	app, err := tui.New(s, p, *configPath)
