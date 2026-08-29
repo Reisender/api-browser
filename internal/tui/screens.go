@@ -359,6 +359,17 @@ func (s *collectionScreen) update(a *App, msg tea.Msg) tea.Cmd {
 			return a.replaceList(s.resource, s.req, s.name)
 		case "u":
 			return setStatus(s.resp.URL, false)
+		case "w":
+			if len(s.filtered) == 0 {
+				return setStatus(errNoContent.Error(), true)
+			}
+			items := make([]any, 0, len(s.filtered))
+			for _, i := range s.filtered {
+				items = append(items, s.resp.Items[i])
+			}
+			what := fmt.Sprintf("%d records %s", len(items), s.name)
+			a.push(newSaveScreen(what, suggestFilename(s.name), []byte(prettyJSON(items)+"\n")))
+			return nil
 		case "y":
 			if it, ok := s.selected(); ok {
 				return a.copyText(client.ItemID(a.spec, it))
@@ -426,7 +437,7 @@ func (s *collectionScreen) view(a *App, w, h int) string {
 }
 
 func (s *collectionScreen) help() []helpEntry {
-	return []helpEntry{{"enter", "open item"}, {"/", "search rows"}, {"A", "fetch all pages"}, {"n/p", "next / prev page"}, {"f", "server filter"}, {"s", "set sort"}, {"L", "page size"}, {"e", "edit all params"}, {"r", "raw JSON"}, {"u", "show URL"}, {"y", "copy id"}, {"R", "reload"}, {"g/G", "top / bottom"}}
+	return []helpEntry{{"enter", "open item"}, {"/", "search rows"}, {"A", "fetch all pages"}, {"n/p", "next / prev page"}, {"f", "server filter"}, {"s", "set sort"}, {"L", "page size"}, {"e", "edit all params"}, {"r", "raw JSON"}, {"u", "show URL"}, {"y", "copy id"}, {"w", "save records"}, {"R", "reload"}, {"g/G", "top / bottom"}}
 }
 
 // --------------------------------------------------------------------- item
@@ -519,6 +530,8 @@ func (s *itemScreen) update(a *App, msg tea.Msg) tea.Cmd {
 			return nil
 		case "u":
 			return setStatus(s.resp.URL, false)
+		case "w":
+			return s.save(a)
 		case "R":
 			if s.resource != nil && s.req.Path != "" {
 				return a.replaceItem(s.resource, s.req, s.name)
@@ -586,6 +599,8 @@ func (s *itemScreen) update(a *App, msg tea.Msg) tea.Cmd {
 		a.push(newRawScreen(s.name+" (raw)", s.resp))
 	case "u":
 		return setStatus(s.resp.URL, false)
+	case "w":
+		return s.save(a)
 	case "R":
 		if s.resource != nil && s.req.Path != "" {
 			return a.replaceItem(s.resource, s.req, s.name)
@@ -660,6 +675,22 @@ func (s *itemScreen) view(a *App, w, h int) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
+func (s *itemScreen) save(a *App) tea.Cmd {
+	if s.jsonText == "" {
+		return setStatus(errNoContent.Error(), true)
+	}
+	resName := "record"
+	if s.resource != nil {
+		resName = s.resource.Name
+	}
+	id := ""
+	if s.resp.Item != nil {
+		id = client.ItemID(a.spec, s.resp.Item)
+	}
+	a.push(newSaveScreen("record "+s.name, suggestFilename(resName, id), []byte(s.jsonText+"\n")))
+	return nil
+}
+
 func (s *itemScreen) jsonView(a *App, w, h int) string {
 	if !s.jsonInit || s.jsonVP.Width != w || s.jsonVP.Height != h-1 {
 		off := s.jsonVP.YOffset
@@ -679,9 +710,9 @@ func (s *itemScreen) jsonView(a *App, w, h int) string {
 
 func (s *itemScreen) help() []helpEntry {
 	if s.jsonMode {
-		return []helpEntry{{"t", "tree view"}, {"↑/↓ pgup/pgdn", "scroll"}, {"y", "copy JSON"}, {"l", "related collections"}, {"r", "raw response"}, {"u", "show URL"}}
+		return []helpEntry{{"t", "tree view"}, {"↑/↓ pgup/pgdn", "scroll"}, {"y", "copy JSON"}, {"w", "save to file"}, {"l", "related collections"}, {"r", "raw response"}, {"u", "show URL"}}
 	}
-	return []helpEntry{{"enter", "follow reference / toggle"}, {"t", "JSON view"}, {"l", "related collections"}, {"←/→", "collapse / expand"}, {"+/-", "expand / collapse all"}, {"r", "raw JSON"}, {"y", "copy value"}, {"u", "show URL"}, {"R", "reload"}}
+	return []helpEntry{{"enter", "follow reference / toggle"}, {"t", "JSON view"}, {"l", "related collections"}, {"←/→", "collapse / expand"}, {"+/-", "expand / collapse all"}, {"r", "raw JSON"}, {"y", "copy value"}, {"w", "save to file"}, {"u", "show URL"}, {"R", "reload"}}
 }
 
 // ---------------------------------------------------------------------- raw
@@ -707,6 +738,9 @@ func (s *rawScreen) update(a *App, msg tea.Msg) tea.Cmd {
 			return a.copyText(s.text)
 		case "u":
 			return setStatus(s.resp.URL, false)
+		case "w":
+			a.push(newSaveScreen("response "+s.name, suggestFilename(strings.TrimSuffix(s.name, " (raw)"), "response"), []byte(s.text+"\n")))
+			return nil
 		}
 	}
 	var cmd tea.Cmd
@@ -725,7 +759,7 @@ func (s *rawScreen) view(a *App, w, h int) string {
 }
 
 func (s *rawScreen) help() []helpEntry {
-	return []helpEntry{{"↑/↓ pgup/pgdn", "scroll"}, {"y", "copy JSON"}, {"u", "show URL"}}
+	return []helpEntry{{"↑/↓ pgup/pgdn", "scroll"}, {"y", "copy JSON"}, {"w", "save to file"}, {"u", "show URL"}}
 }
 
 // ------------------------------------------------------------------ request

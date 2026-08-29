@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -872,5 +873,126 @@ func TestHighlightJSON(t *testing.T) {
 	}
 	if prettyJSON(map[string]any{"k": 1}) != "{\n  \"k\": 1\n}" {
 		t.Errorf("prettyJSON = %q", prettyJSON(map[string]any{"k": 1}))
+	}
+}
+
+func TestSaveRecordToFile(t *testing.T) {
+	srv := server(t)
+	defer srv.Close()
+	a := newTestApp(t, srv)
+	dir := t.TempDir()
+	selectResource(t, a, "classes")
+	press(t, a, "enter", "enter")
+	is := a.top().(*itemScreen)
+
+	press(t, a, "w")
+	ss, ok := a.top().(*saveScreen)
+	if !ok {
+		t.Fatalf("top=%T", a.top())
+	}
+	if ss.form.get("path") != "classes-c1.json" {
+		t.Errorf("suggested = %q", ss.form.get("path"))
+	}
+	// Type a full path (keys like q/a/H must be typed, not act globally).
+	press(t, a, "ctrl+u")
+	typeText(t, a, dir+"/sub/Hq a.json")
+	press(t, a, "enter")
+	if a.statusErr {
+		t.Fatalf("save: %s", a.status)
+	}
+	if a.top() != is {
+		t.Fatalf("should return to item, top=%T", a.top())
+	}
+	data, err := os.ReadFile(dir + "/sub/Hq a.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != is.jsonText+"\n" || !strings.Contains(string(data), `"title": "Math"`) {
+		t.Errorf("file content = %q", data)
+	}
+	if !strings.Contains(a.status, "saved") {
+		t.Errorf("status = %q", a.status)
+	}
+
+	// Overwrite requires a second enter.
+	press(t, a, "w", "ctrl+u")
+	typeText(t, a, dir+"/sub/Hq a.json")
+	press(t, a, "enter")
+	if !a.statusErr || !strings.Contains(a.status, "exists") || a.top() == is {
+		t.Fatalf("expected overwrite prompt, status=%q", a.status)
+	}
+	press(t, a, "enter")
+	if a.statusErr || a.top() != is {
+		t.Errorf("second enter should overwrite: %q", a.status)
+	}
+	// Editing the path resets the confirmation.
+	press(t, a, "w", "ctrl+u")
+	typeText(t, a, dir+"/sub/Hq a.json")
+	press(t, a, "enter")
+	press(t, a, "x")
+	press(t, a, "backspace")
+	press(t, a, "enter")
+	if !strings.Contains(a.status, "exists") {
+		t.Errorf("edit should reset confirmation, status=%q", a.status)
+	}
+	press(t, a, "esc")
+
+	// Save from JSON mode works too; empty path rejected; write error surfaced.
+	press(t, a, "t", "w", "ctrl+u", "enter")
+	if !a.statusErr || !strings.Contains(a.status, "file path") {
+		t.Errorf("status = %q", a.status)
+	}
+	old := writeFile
+	writeFile = func(string, []byte, os.FileMode) error { return fmt.Errorf("disk full") }
+	typeText(t, a, dir+"/fail.json")
+	press(t, a, "enter")
+	writeFile = old
+	if !a.statusErr || !strings.Contains(a.status, "disk full") {
+		t.Errorf("status = %q", a.status)
+	}
+	press(t, a, "esc", "t")
+
+	// Collection: saves the filtered records as an array.
+	press(t, a, "esc")
+	cs := a.top().(*collectionScreen)
+	press(t, a, "/")
+	typeText(t, a, "art")
+	press(t, a, "enter", "w")
+	ss = a.top().(*saveScreen)
+	if ss.form.get("path") != "classes.json" || !strings.Contains(ss.title(), "1 records") {
+		t.Errorf("collection save: path=%q title=%q", ss.form.get("path"), ss.title())
+	}
+	press(t, a, "ctrl+u")
+	typeText(t, a, dir+"/list.json")
+	press(t, a, "enter")
+	var arr []map[string]any
+	data, _ = os.ReadFile(dir + "/list.json")
+	if err := json.Unmarshal(data, &arr); err != nil || len(arr) != 1 || arr[0]["title"] != "Art" {
+		t.Errorf("list file = %s err=%v", data, err)
+	}
+	_ = cs
+
+	// Raw screen save.
+	press(t, a, "r", "w")
+	ss = a.top().(*saveScreen)
+	if ss.form.get("path") != "classes-response.json" {
+		t.Errorf("raw suggested = %q", ss.form.get("path"))
+	}
+	press(t, a, "esc", "esc")
+}
+
+func TestSuggestFilenameAndHome(t *testing.T) {
+	if got := suggestFilename("classes/c1/students", "id with spaces!"); got != "classes-c1-students-id-with-spaces.json" {
+		t.Errorf("suggestFilename = %q", got)
+	}
+	if got := suggestFilename("", ""); got != "record.json" {
+		t.Errorf("empty = %q", got)
+	}
+	t.Setenv("HOME", "/home/x")
+	if got := expandHome("~/a.json"); got != "/home/x/a.json" {
+		t.Errorf("expandHome = %q", got)
+	}
+	if got := expandHome("rel.json"); got != "rel.json" {
+		t.Errorf("expandHome rel = %q", got)
 	}
 }

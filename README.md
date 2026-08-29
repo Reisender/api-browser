@@ -70,9 +70,9 @@ Flags override profile values, so `-profile district -token X` swaps the token.
 | Screen | Keys |
 |---|---|
 | Resources | `enter` list · `e` edit params before running · `/` filter list |
-| Collection | `enter` open item · `/` live search rows · `A` fetch all pages · `n`/`p` next/prev page · `f` server filter · `s` sort · `L` page size · `e` edit all params · `r` raw JSON · `u` show URL · `y` copy id · `R` reload |
-| Item | `enter` follow reference / toggle node · `t` toggle tree / pretty JSON · `l` related sub-collections · `←`/`→` collapse/expand · `+`/`-` expand/collapse all · `r` raw · `y` copy value |
-| Raw | scroll · `y` copy JSON |
+| Collection | `enter` open item · `/` live search rows · `A` fetch all pages · `n`/`p` next/prev page · `f` server filter · `s` sort · `L` page size · `e` edit all params · `r` raw JSON · `u` show URL · `y` copy id · `w` save records to file · `R` reload |
+| Item | `enter` follow reference / toggle node · `t` toggle tree / pretty JSON · `w` save record to file · `l` related sub-collections · `←`/`→` collapse/expand · `+`/`-` expand/collapse all · `r` raw · `y` copy value |
+| Raw | scroll · `y` copy JSON · `w` save response to file |
 | Everywhere | `esc`/`backspace` back · `H` home · `a` connection · `?` help · `q` back/quit · `ctrl+c` quit |
 
 Every request parameter is editable. On a collection, `L` changes the page
@@ -98,6 +98,12 @@ On an item, `t` toggles between the collapsible tree and a syntax-highlighted
 pretty-JSON view of the record itself (without the response wrapper). Scroll
 with the arrow keys, `y` copies the JSON; `l`, `r`, `u` and `R` work in both
 views.
+
+`w` saves what you're looking at as pretty JSON: the record on an item screen
+(default name `classes-c1.json`), the visible — i.e. searched — records as an
+array on a collection, or the full response on the raw screen. You're
+prompted for the path (`~` expands, directories are created, overwriting an
+existing file asks for a second `enter`).
 
 References are detected generically: any object carrying the spec's id field
 plus a `type` (e.g. `{"sourcedId": "o1", "type": "org", "href": …}`) is

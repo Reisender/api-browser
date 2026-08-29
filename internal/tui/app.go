@@ -378,7 +378,7 @@ func (a *App) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func isForm(s screen) bool {
 	switch x := s.(type) {
-	case *requestScreen, *connectionScreen, *quickParamScreen:
+	case *requestScreen, *connectionScreen, *quickParamScreen, *saveScreen:
 		return true
 	case *collectionScreen:
 		return x.searching
