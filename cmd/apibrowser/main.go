@@ -29,6 +29,7 @@ func main() {
 		header     = flag.String("header", "", "arbitrary auth header as 'Name: value'")
 		listSpecs  = flag.Bool("list-specs", false, "list builtin specs and exit")
 		listProfs  = flag.Bool("list-profiles", false, "list saved profiles and exit")
+		showVer    = flag.Bool("version", false, "print version and exit")
 	)
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: apibrowser [flags]\n\nExplore a REST API from the terminal.\n\n")
@@ -37,6 +38,10 @@ func main() {
 	}
 	flag.Parse()
 
+	if *showVer {
+		fmt.Println("apibrowser", versionString())
+		return
+	}
 	if *listSpecs {
 		for _, n := range spec.BuiltinNames() {
 			fmt.Println(n)

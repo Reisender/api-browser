@@ -1,7 +1,9 @@
 .PHONY: build test run lint
 
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null)
+
 build:
-	go build -o bin/apibrowser ./cmd/apibrowser
+	go build -ldflags "-X main.version=$(VERSION)" -o bin/apibrowser ./cmd/apibrowser
 
 test:
 	go test ./... -cover
