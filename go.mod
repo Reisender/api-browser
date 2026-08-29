@@ -1,4 +1,4 @@
-module github.com/reisenderlabs/api-browser
+module github.com/Reisender/api-browser
 
 go 1.26.6
 

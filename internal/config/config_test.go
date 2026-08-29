@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/reisenderlabs/api-browser/internal/auth"
+	"github.com/Reisender/api-browser/internal/auth"
 )
 
 func TestRoundTrip(t *testing.T) {

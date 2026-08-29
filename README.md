@@ -22,6 +22,15 @@ Ships with the **IMS OneRoster v1.1** API spec built in (rostering + gradebook).
 
 ## Install / run
 
+With Go 1.26+ installed:
+
+```sh
+go install github.com/Reisender/api-browser/cmd/apibrowser@latest
+```
+
+This puts `apibrowser` in `$(go env GOPATH)/bin` (usually `~/go/bin`); make
+sure that is on your `PATH`. Or build from a checkout:
+
 ```sh
 go build -o bin/apibrowser ./cmd/apibrowser
 

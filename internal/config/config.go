@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/reisenderlabs/api-browser/internal/auth"
+	"github.com/Reisender/api-browser/internal/auth"
 	"gopkg.in/yaml.v3"
 )
 

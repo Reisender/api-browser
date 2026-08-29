@@ -13,9 +13,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/reisenderlabs/api-browser/internal/client"
-	"github.com/reisenderlabs/api-browser/internal/jsontree"
-	"github.com/reisenderlabs/api-browser/internal/spec"
+	"github.com/Reisender/api-browser/internal/client"
+	"github.com/Reisender/api-browser/internal/jsontree"
+	"github.com/Reisender/api-browser/internal/spec"
 )
 
 // screen is one layer of the navigation stack.

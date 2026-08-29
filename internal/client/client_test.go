@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/reisenderlabs/api-browser/internal/auth"
-	"github.com/reisenderlabs/api-browser/internal/spec"
+	"github.com/Reisender/api-browser/internal/auth"
+	"github.com/Reisender/api-browser/internal/spec"
 )
 
 func loadSpec(t *testing.T) *spec.Spec {

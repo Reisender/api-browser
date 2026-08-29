@@ -13,9 +13,9 @@ import (
 	"github.com/charmbracelet/bubbles/cursor"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/reisenderlabs/api-browser/internal/auth"
-	"github.com/reisenderlabs/api-browser/internal/config"
-	"github.com/reisenderlabs/api-browser/internal/spec"
+	"github.com/Reisender/api-browser/internal/auth"
+	"github.com/Reisender/api-browser/internal/config"
+	"github.com/Reisender/api-browser/internal/spec"
 )
 
 func server(t *testing.T) *httptest.Server {

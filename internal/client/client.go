@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/reisenderlabs/api-browser/internal/auth"
-	"github.com/reisenderlabs/api-browser/internal/spec"
+	"github.com/Reisender/api-browser/internal/auth"
+	"github.com/Reisender/api-browser/internal/spec"
 )
 
 // Request is a single API call to make.

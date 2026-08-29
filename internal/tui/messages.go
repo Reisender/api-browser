@@ -6,8 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/reisenderlabs/api-browser/internal/client"
-	"github.com/reisenderlabs/api-browser/internal/spec"
+	"github.com/Reisender/api-browser/internal/client"
+	"github.com/Reisender/api-browser/internal/spec"
 )
 
 // fetchKind says how to present a response once it arrives.

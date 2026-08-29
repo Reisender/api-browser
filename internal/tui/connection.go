@@ -5,9 +5,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/reisenderlabs/api-browser/internal/auth"
-	"github.com/reisenderlabs/api-browser/internal/client"
-	"github.com/reisenderlabs/api-browser/internal/config"
+	"github.com/Reisender/api-browser/internal/auth"
+	"github.com/Reisender/api-browser/internal/client"
+	"github.com/Reisender/api-browser/internal/config"
 )
 
 // connectionScreen edits the base URL and auth settings.
