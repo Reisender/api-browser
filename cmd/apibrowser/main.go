@@ -1,5 +1,6 @@
 // Command apibrowser is a terminal UI for exploring REST APIs described by a
-// small navigation spec. It ships with the OneRoster v1p1 API built in.
+// small navigation spec. It ships with the OneRoster v1.1 and v1.2 APIs
+// built in.
 package main
 
 import (
@@ -17,7 +18,7 @@ import (
 
 func main() {
 	var (
-		specName   = flag.String("spec", "", "builtin spec name, or path to a native spec YAML or an OpenAPI/Swagger document (default: profile's spec, else oneroster-v1p1)")
+		specName   = flag.String("spec", "", "builtin spec name, or path to a native spec YAML or an OpenAPI/Swagger document (default: the profile's spec, else pick one on start)")
 		dumpSpec   = flag.String("dump-spec", "", "write the loaded spec (e.g. one inferred from OpenAPI) as native YAML to this file ('-' for stdout) and exit")
 		baseURL    = flag.String("url", "", "API base URL, e.g. https://example.com")
 		profile    = flag.String("profile", "", "saved profile name from the config file")
@@ -36,7 +37,7 @@ func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: apibrowser [flags]\n\nExplore a REST API from the terminal.\n\n")
 		flag.PrintDefaults()
-		fmt.Fprintf(os.Stderr, "\nexamples:\n  apibrowser -url https://host -auth bearer -token XYZ\n  apibrowser -url https://host -auth oauth2 -client-id ID -client-secret S -token-url https://host/oauth/token\n  apibrowser -url https://host -auth header -header 'X-Api-Key: abc'\n  apibrowser -profile district\n  apibrowser -spec ./openapi.yaml -url https://host        # infer navigation from OpenAPI\n  apibrowser -spec ./openapi.yaml -dump-spec my-api.yaml   # save inferred spec to hand-tune\n")
+		fmt.Fprintf(os.Stderr, "\nexamples:\n  apibrowser -url https://host -auth bearer -token XYZ\n  apibrowser -url https://host -auth oauth2 -client-id ID -client-secret S -token-url https://host/oauth/token\n  apibrowser -url https://host -auth header -header 'X-Api-Key: abc'\n  apibrowser -profile district\n  apibrowser -spec oneroster-v1p2 -url https://host          # skip the spec picker\n  apibrowser -spec ./openapi.yaml -url https://host        # infer navigation from OpenAPI\n  apibrowser -spec ./openapi.yaml -dump-spec my-api.yaml   # save inferred spec to hand-tune\n")
 	}
 	flag.Parse()
 
@@ -45,8 +46,8 @@ func main() {
 		return
 	}
 	if *listSpecs {
-		for _, n := range spec.BuiltinNames() {
-			fmt.Println(n)
+		for _, info := range spec.Builtins() {
+			fmt.Printf("%-16s %s\n", info.ID, info.Description)
 		}
 		return
 	}
@@ -80,8 +81,11 @@ func main() {
 	if *specName != "" {
 		p.Spec = *specName
 	}
-	if p.Spec == "" {
-		p.Spec = "oneroster-v1p1"
+	// Nothing named a spec, so load the default and let the TUI offer the
+	// choice once it is up.
+	askSpec := p.Spec == ""
+	if askSpec {
+		p.Spec = spec.DefaultBuiltin
 	}
 	if *authMethod != "" {
 		p.Auth.Method = auth.Method(*authMethod)
@@ -147,6 +151,9 @@ func main() {
 	app, err := tui.New(s, p, *configPath)
 	if err != nil {
 		fail(err)
+	}
+	if askSpec {
+		app.PromptForSpec()
 	}
 	if err := tui.Run(app); err != nil {
 		fail(err)

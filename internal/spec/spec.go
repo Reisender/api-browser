@@ -69,6 +69,10 @@ type Paging struct {
 	DefaultLimit int    `yaml:"defaultLimit"`
 }
 
+// DefaultBuiltin is the spec used when none is named and the user is not
+// asked to choose (e.g. a non-interactive run).
+const DefaultBuiltin = "oneroster-v1p1"
+
 // BuiltinNames returns the names of embedded specs (without extension).
 func BuiltinNames() []string {
 	entries, _ := builtin.ReadDir("specs")
@@ -78,6 +82,27 @@ func BuiltinNames() []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// Info summarises an embedded spec without the caller having to load it.
+type Info struct {
+	ID          string // builtin name, i.e. the file name without extension
+	Name        string
+	Description string
+}
+
+// Builtins returns a summary of every embedded spec, sorted by ID. Specs that
+// fail to parse are skipped, so a broken embed cannot break the picker.
+func Builtins() []Info {
+	var out []Info
+	for _, n := range BuiltinNames() {
+		s, err := LoadBuiltin(n)
+		if err != nil {
+			continue
+		}
+		out = append(out, Info{ID: n, Name: s.Name, Description: s.Description})
+	}
+	return out
 }
 
 // LoadBuiltin loads an embedded spec by name (e.g. "oneroster-v1p1").

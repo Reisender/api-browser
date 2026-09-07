@@ -61,6 +61,26 @@ func New(s *spec.Spec, p config.Profile, configPath string) (*App, error) {
 	return a, nil
 }
 
+// PromptForSpec pushes the builtin spec picker on top of the stack. main
+// calls it at startup when no spec was named on the command line or in the
+// profile. With fewer than two builtins there is nothing to choose, so it is
+// a no-op.
+func (a *App) PromptForSpec() {
+	if len(spec.BuiltinNames()) < 2 {
+		return
+	}
+	a.push(newSpecScreen(a))
+}
+
+// setSpec swaps the spec the app navigates, rebuilding the resource list at
+// the bottom of the stack and repointing the client at the new base path.
+func (a *App) setSpec(s *spec.Spec, name string) {
+	a.spec = s
+	a.profile.Spec = name
+	a.client.Spec = s
+	a.stack[0] = newResourcesScreen(s)
+}
+
 func (a *App) Init() tea.Cmd { return a.spin.Tick }
 
 // --- navigation --------------------------------------------------------
@@ -392,8 +412,11 @@ func isSearchingCollection(s screen) bool {
 }
 
 func isFiltering(s screen) bool {
-	if rs, ok := s.(*resourcesScreen); ok {
-		return rs.list.SettingFilter()
+	switch x := s.(type) {
+	case *resourcesScreen:
+		return x.list.SettingFilter()
+	case *specScreen:
+		return x.list.SettingFilter()
 	}
 	return false
 }

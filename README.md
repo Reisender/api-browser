@@ -5,7 +5,7 @@ Load an API definition, list collections, page through results, open items,
 follow references between resources and jump to related sub-collections —
 without writing a single curl command.
 
-Ships with the **IMS OneRoster v1.1** API spec built in (rostering + gradebook).
+Ships with the **OneRoster v1.1** and **v1.2** API specs built in.
 
 ```
 ┌ api-browser  resources › classes › classes/c1 › courses/k1      https://sis.example.com  oauth2 client abc @ …
@@ -45,12 +45,33 @@ bin/apibrowser -url https://sis.example.com -auth oauth2 \
 # arbitrary header
 bin/apibrowser -url https://sis.example.com -auth header -header 'X-Api-Key: abc123'
 
-# no flags: opens the connection screen where you can type everything in
+# pick a builtin spec explicitly
+bin/apibrowser -spec oneroster-v1p2 -url https://sis.example.com -auth bearer -token "$TOKEN"
+
+# no flags: pick a spec, then type the connection details in
 bin/apibrowser
 ```
 
 Credentials can also come from `APIBROWSER_TOKEN`, `APIBROWSER_CLIENT_ID`,
 `APIBROWSER_CLIENT_SECRET` and `APIBROWSER_TOKEN_URL`.
+
+### Choosing a spec
+
+`apibrowser -list-specs` prints the built-in specs:
+
+| Spec | Base paths |
+| --- | --- |
+| `oneroster-v1p1` | `/ims/oneroster/v1p1` (rostering + gradebook) |
+| `oneroster-v1p2` | `/ims/oneroster/{rostering,gradebook,resources}/v1p2` |
+
+OneRoster v1.2 splits the API into three services with their own base paths,
+adds `scoreScales`, `assessmentLineItems`, `assessmentResults` and a standalone
+`resources` service, and hangs the gradebook and resource collections off
+classes, courses, schools and users as related sub-collections.
+
+Name one with `-spec`. If neither `-spec` nor the profile names a spec,
+apibrowser opens a picker on start; `esc` there keeps the default
+(`oneroster-v1p1`).
 
 ### Profiles
 
@@ -141,12 +162,12 @@ $EDITOR my-api.yaml          # fix wrapper keys, add refTypes, reorder columns�
 apibrowser -spec my-api.yaml -url https://api.example.com
 ```
 
-`-dump-spec -` writes to stdout. It also works on the builtin spec
-(`-spec oneroster-v1p1 -dump-spec -`) as a template.
+`-dump-spec -` writes to stdout. It also works on the builtin specs
+(`-spec oneroster-v1p2 -dump-spec -`) as a template.
 
 ## Writing your own spec
 
-Specs are small YAML files (see `internal/spec/specs/oneroster-v1p1.yaml`).
+Specs are small YAML files (see `internal/spec/specs/`).
 Pass a path with `-spec ./my-api.yaml`.
 
 ```yaml
@@ -175,8 +196,6 @@ resources:
     listPath: /visits
 ```
 
-`apibrowser -list-specs` prints the built-in specs.
-
 ## Development
 
 ```sh
@@ -186,7 +205,7 @@ make lint     # go vet + gofmt
 
 Layout:
 
-- `internal/spec` – spec model, YAML loading, embedded OneRoster definition
+- `internal/spec` – spec model, YAML loading, embedded OneRoster definitions
 - `internal/openapi` – infers a spec from OpenAPI 3.x / Swagger 2 documents
 - `internal/auth` – bearer / OAuth2 client-credentials (cached, auto-refresh) / arbitrary header
 - `internal/client` – spec-driven HTTP client, list/item extraction, reference detection

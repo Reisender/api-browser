@@ -93,3 +93,72 @@ func TestPlaceholdersAndExpand(t *testing.T) {
 		t.Errorf("expected missing error, got %v", err)
 	}
 }
+
+func TestLoadBuiltinOneRosterV1p2(t *testing.T) {
+	s, err := LoadBuiltin("oneroster-v1p2")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if s.Name != "OneRoster v1p2" {
+		t.Errorf("name = %q", s.Name)
+	}
+	if s.IDField != "sourcedId" {
+		t.Errorf("idField = %q", s.IDField)
+	}
+	// Resources new in v1.2, spread across the gradebook and resources services.
+	for _, want := range []string{"scoreScales", "assessmentLineItems", "assessmentResults", "resources"} {
+		if _, ok := s.Resource(want); !ok {
+			t.Errorf("missing v1.2 resource %q", want)
+		}
+	}
+	// v1.2 splits the API into three per-service base paths.
+	for res, want := range map[string]string{
+		"users":       "/ims/oneroster/rostering/v1p2/users",
+		"lineItems":   "/ims/oneroster/gradebook/v1p2/lineItems",
+		"resources":   "/ims/oneroster/resources/v1p2/resources",
+		"scoreScales": "/ims/oneroster/gradebook/v1p2/scoreScales",
+	} {
+		r, ok := s.Resource(res)
+		if !ok {
+			t.Fatalf("missing resource %q", res)
+		}
+		if got := s.FullPath(r.ListPath); got != want {
+			t.Errorf("%s listPath = %q, want %q", res, got, want)
+		}
+	}
+	if r, ok := s.ResourceForRefType("scoreScale"); !ok || r.Name != "scoreScales" {
+		t.Errorf("refType scoreScale -> %v", r)
+	}
+	// Collections still use the v1.1 payload keys.
+	if r, _ := s.Resource("schools"); r.ListKey != "orgs" {
+		t.Errorf("schools listKey = %q, want orgs", r.ListKey)
+	}
+	if r, _ := s.Resource("students"); r.ListKey != "users" {
+		t.Errorf("students listKey = %q, want users", r.ListKey)
+	}
+}
+
+func TestBuiltins(t *testing.T) {
+	infos := Builtins()
+	if len(infos) != len(BuiltinNames()) {
+		t.Fatalf("Builtins() = %d entries, BuiltinNames() = %d", len(infos), len(BuiltinNames()))
+	}
+	want := map[string]string{"oneroster-v1p1": "OneRoster v1p1", "oneroster-v1p2": "OneRoster v1p2"}
+	for _, i := range infos {
+		if n, ok := want[i.ID]; ok {
+			if i.Name != n {
+				t.Errorf("%s name = %q, want %q", i.ID, i.Name, n)
+			}
+			if i.Description == "" {
+				t.Errorf("%s has no description", i.ID)
+			}
+			delete(want, i.ID)
+		}
+	}
+	for id := range want {
+		t.Errorf("Builtins() missing %q", id)
+	}
+	if _, err := LoadBuiltin(DefaultBuiltin); err != nil {
+		t.Errorf("DefaultBuiltin %q does not load: %v", DefaultBuiltin, err)
+	}
+}
