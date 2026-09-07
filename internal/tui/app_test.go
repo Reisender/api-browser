@@ -743,7 +743,10 @@ func TestFetchAllPagesAndSearch(t *testing.T) {
 	_ = cmd
 }
 
-func TestBrowseOpenAPIInferredSpec(t *testing.T) {
+// petServer serves the petstore document's endpoints as bare JSON arrays and
+// objects, i.e. with no wrapper keys for the spec to name.
+func petServer(t *testing.T) *httptest.Server {
+	t.Helper()
 	mux := http.NewServeMux()
 	j := func(w http.ResponseWriter, v any) { _ = json.NewEncoder(w).Encode(v) }
 	mux.HandleFunc("/api/v3/pets", func(w http.ResponseWriter, r *http.Request) {
@@ -761,7 +764,11 @@ func TestBrowseOpenAPIInferredSpec(t *testing.T) {
 	mux.HandleFunc("/api/v3/pets/p1/visits", func(w http.ResponseWriter, r *http.Request) {
 		j(w, []any{map[string]any{"id": "v1", "date": "2026-01-01"}})
 	})
-	srv := httptest.NewServer(mux)
+	return httptest.NewServer(mux)
+}
+
+func TestBrowseOpenAPIInferredSpec(t *testing.T) {
+	srv := petServer(t)
 	defer srv.Close()
 
 	s, err := openapi.LoadAny("../openapi/testdata/petstore.yaml")

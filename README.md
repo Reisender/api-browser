@@ -90,8 +90,8 @@ Flags override profile values, so `-profile district -token X` swaps the token.
 
 | Screen | Keys |
 |---|---|
-| Resources | `enter` list · `e` edit params before running · `/` filter list |
-| Collection | `enter` open item · `/` live search rows · `A` fetch all pages · `n`/`p` next/prev page · `f` server filter · `s` sort · `L` page size · `e` edit all params · `r` raw JSON · `u` show URL · `y` copy id · `w` save records to file · `R` reload |
+| Resources | `enter` list · `i` GET one record by id · `e` edit params before running · `/` filter list |
+| Collection | `enter` open item · `i` GET by id · `/` live search rows · `A` fetch all pages · `n`/`p` next/prev page · `f` server filter · `s` sort · `L` page size · `e` edit all params · `r` raw JSON · `u` show URL · `y` copy id · `w` save records to file · `R` reload |
 | Item | `enter` follow reference / toggle node · `t` toggle tree / pretty JSON · `w` save record to file · `l` related sub-collections · `←`/`→` collapse/expand · `+`/`-` expand/collapse all · `r` raw · `y` copy value |
 | Raw | scroll · `y` copy JSON · `w` save response to file |
 | Everywhere | `esc`/`backspace` back · `H` home · `a` connection · `?` help · `q` back/quit · `ctrl+c` quit |
@@ -102,6 +102,14 @@ size (e.g. 100 → 1000), `f` and `s` set the server-side filter and sort, and
 ones the spec doesn't list, via the `extra` field (`k=v&k2=v2`). The editor
 shows the exact URL that will be requested as you type. Press `e` on the
 resource list to set parameters *before* the first request.
+
+The item endpoints (`GET /users/{sourcedId}`) are reachable directly, not
+only by drilling into a listing. Press `i` on the resource list or on a
+collection, type the id, and `enter` fetches that one record straight into
+the item view — handy when you already know the id, or when the record isn't
+on the page you're looking at. Resources with no `itemPath` fall back to
+`listPath` + `/{idField}`. The editor is the same one `e` opens, minus the
+paging parameters, so you can still send `fields=` or anything in `extra`.
 
 `/` on a collection opens a live search box: rows narrow as you type (any
 field, case-insensitive, space-separated words must all match). `enter` keeps

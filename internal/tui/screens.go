@@ -71,6 +71,11 @@ func (s *resourcesScreen) update(a *App, msg tea.Msg) tea.Cmd {
 				a.push(newRequestScreen(a, it.r, client.ListRequest(a.spec, it.r), it.r.Name))
 			}
 			return nil
+		case "i":
+			if it, ok := s.list.SelectedItem().(resourceItem); ok {
+				a.push(newItemRequestScreen(a, it.r, it.r.Name))
+			}
+			return nil
 		}
 	}
 	var cmd tea.Cmd
@@ -84,7 +89,7 @@ func (s *resourcesScreen) view(a *App, w, h int) string {
 }
 
 func (s *resourcesScreen) help() []helpEntry {
-	return []helpEntry{{"enter", "list resource"}, {"e", "edit request first"}, {"/", "filter resources"}, {"a", "connection settings"}}
+	return []helpEntry{{"enter", "list resource"}, {"i", "GET one by id"}, {"e", "edit request first"}, {"/", "filter resources"}, {"a", "connection settings"}}
 }
 
 // --------------------------------------------------------------- collection
@@ -337,6 +342,12 @@ func (s *collectionScreen) update(a *App, msg tea.Msg) tea.Cmd {
 		case "e":
 			a.push(newRequestScreen(a, s.resource, s.req, s.name))
 			return nil
+		case "i":
+			if s.resource == nil {
+				return setStatus("this collection has no resource to GET by id", true)
+			}
+			a.push(newItemRequestScreen(a, s.resource, s.resource.Name))
+			return nil
 		case "f":
 			a.push(newQuickParamScreen(a, s, "filter", "Filter expression, e.g. status='active' AND role='student'"))
 			return nil
@@ -437,7 +448,7 @@ func (s *collectionScreen) view(a *App, w, h int) string {
 }
 
 func (s *collectionScreen) help() []helpEntry {
-	return []helpEntry{{"enter", "open item"}, {"/", "search rows"}, {"A", "fetch all pages"}, {"n/p", "next / prev page"}, {"f", "server filter"}, {"s", "set sort"}, {"L", "page size"}, {"e", "edit all params"}, {"r", "raw JSON"}, {"u", "show URL"}, {"y", "copy id"}, {"w", "save records"}, {"R", "reload"}, {"g/G", "top / bottom"}}
+	return []helpEntry{{"enter", "open item"}, {"i", "GET by id"}, {"/", "search rows"}, {"A", "fetch all pages"}, {"n/p", "next / prev page"}, {"f", "server filter"}, {"s", "set sort"}, {"L", "page size"}, {"e", "edit all params"}, {"r", "raw JSON"}, {"u", "show URL"}, {"y", "copy id"}, {"w", "save records"}, {"R", "reload"}, {"g/G", "top / bottom"}}
 }
 
 // --------------------------------------------------------------------- item
@@ -766,15 +777,28 @@ func (s *rawScreen) help() []helpEntry {
 
 type requestScreen struct {
 	name     string
+	kind     fetchKind // how to present the response: a collection or one record
 	resource *spec.Resource
 	req      client.Request
 	form     *form
 	pathVars []string
 }
 
+// newRequestScreen edits a collection request before running it.
 func newRequestScreen(a *App, res *spec.Resource, req client.Request, name string) *requestScreen {
+	return newRequestScreenKind(a, fetchList, res, req, name)
+}
+
+// newItemRequestScreen edits a single-record GET, e.g. /users/{sourcedId}.
+// The id starts empty for the user to fill in; resources with no explicit
+// itemPath fall back to listPath + "/{idField}".
+func newItemRequestScreen(a *App, res *spec.Resource, name string) *requestScreen {
+	return newRequestScreenKind(a, fetchItem, res, client.ItemRequest(a.spec, res, ""), name)
+}
+
+func newRequestScreenKind(a *App, kind fetchKind, res *spec.Resource, req client.Request, name string) *requestScreen {
 	req = cloneRequest(req)
-	s := &requestScreen{name: name, resource: res, req: req}
+	s := &requestScreen{name: name, kind: kind, resource: res, req: req}
 	var fields []*field
 	s.pathVars = spec.Placeholders(req.Path)
 	for i, ph := range s.pathVars {
@@ -787,6 +811,10 @@ func newRequestScreen(a *App, res *spec.Resource, req client.Request, name strin
 	first := true
 	seen := map[string]bool{}
 	for _, p := range a.spec.QueryParams {
+		// Paging a single record is meaningless, so leave those out.
+		if kind == fetchItem && isPagingParam(a.spec, p.Name) {
+			continue
+		}
 		f := newField("q:"+p.Name, p.Name, req.Query[p.Name], p.Description)
 		if first {
 			f.Section = "Query"
@@ -813,7 +841,33 @@ func newRequestScreen(a *App, res *spec.Resource, req client.Request, name strin
 	return s
 }
 
-func (s *requestScreen) title() string { return "request: " + s.name }
+// isPagingParam reports whether name is the spec's limit or offset parameter.
+func isPagingParam(s *spec.Spec, name string) bool {
+	pg := s.Paging
+	return pg != nil && (name == pg.LimitParam || name == pg.OffsetParam)
+}
+
+func (s *requestScreen) title() string {
+	if s.kind == fetchItem {
+		return "get: " + s.name
+	}
+	return "request: " + s.name
+}
+
+// resultTitle names the screen the response will open in. A by-id GET is
+// named after the id it fetched, matching how items opened from a collection
+// or followed from a reference are labelled.
+func (s *requestScreen) resultTitle(req client.Request) string {
+	if s.kind != fetchItem {
+		return s.name
+	}
+	for _, ph := range s.pathVars {
+		if v := req.PathVars[ph]; v != "" {
+			return s.name + "/" + v
+		}
+	}
+	return s.name
+}
 
 func (s *requestScreen) build() (client.Request, error) {
 	req := cloneRequest(s.req)
@@ -855,14 +909,14 @@ func (s *requestScreen) update(a *App, msg tea.Msg) tea.Cmd {
 			return setStatus(err.Error(), true)
 		}
 		a.pop()
+		if s.kind == fetchItem {
+			return a.openItem(s.resource, req, s.resultTitle(req))
+		}
 		// If the previous screen is a collection of the same request, replace it.
 		if cs, ok := a.top().(*collectionScreen); ok && cs.req.Path == req.Path {
 			return a.replaceList(s.resource, req, s.name)
 		}
-		if req.ListKey != "" || s.resource == nil || req.ItemKey == "" {
-			return a.openList(s.resource, req, s.name)
-		}
-		return a.openItem(s.resource, req, s.name)
+		return a.openList(s.resource, req, s.name)
 	}
 	cmd, _ := s.form.update(msg)
 	return cmd
