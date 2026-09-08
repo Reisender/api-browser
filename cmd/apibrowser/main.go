@@ -155,6 +155,13 @@ func main() {
 	if askSpec {
 		app.PromptForSpec()
 	}
+	// Nothing named a connection: no -profile, no default profile and no
+	// -url. Offer the saved ones rather than an empty connection form. The
+	// picker goes on top of the spec prompt — a chosen profile brings its own
+	// spec, and esc falls back to picking one.
+	if *profile == "" && p.BaseURL == "" {
+		app.PromptForProfile()
+	}
 	if err := tui.Run(app); err != nil {
 		fail(err)
 	}

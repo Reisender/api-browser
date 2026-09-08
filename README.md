@@ -94,6 +94,21 @@ bin/apibrowser -list-profiles
 
 Flags override profile values, so `-profile district -token X` swaps the token.
 
+`P` opens the profile picker at any point in a session: pick one and the base
+URL, auth, extra headers and spec all switch at once. As with `S`, the
+navigation resets to the resource list — the records on screen came from the
+old host — and picking the profile you are already on just returns you to what
+you were doing. A profile that names a spec you cannot load, or auth that does
+not validate, is reported in the status line and changes nothing. The header
+shows the active profile's name.
+
+`d` in the picker makes the highlighted profile the default, or clears the
+default when it already is that profile.
+
+The default profile is what a bare `apibrowser` loads. Without one — and
+without `-profile` or `-url` — the picker opens on start instead, so long as
+there are at least two profiles to choose between.
+
 ## Navigating
 
 | Screen | Keys |
@@ -102,7 +117,7 @@ Flags override profile values, so `-profile district -token X` swaps the token.
 | Collection | `enter` open item · `i` GET by id · `/` live search rows · `A` fetch all pages · `n`/`p` next/prev page · `f` server filter · `s` sort · `L` page size · `e` edit all params · `r` raw JSON · `u` show URL · `y` copy id · `w` save records to file · `R` reload |
 | Item | `enter` follow reference / toggle node · `t` toggle tree / pretty JSON · `w` save record to file · `l` related sub-collections · `←`/`→` collapse/expand · `+`/`-` expand/collapse all · `r` raw · `y` copy value |
 | Raw | scroll · `y` copy JSON · `w` save response to file |
-| Everywhere | `esc`/`backspace` back · `H` home · `a` connection · `S` switch spec · `?` help · `q` back/quit · `ctrl+c` quit |
+| Everywhere | `esc`/`backspace` back · `H` home · `a` connection · `P` switch profile · `S` switch spec · `?` help · `q` back/quit · `ctrl+c` quit |
 
 Every request parameter is editable. On a collection, `L` changes the page
 size (e.g. 100 → 1000), `f` and `s` set the server-side filter and sort, and
