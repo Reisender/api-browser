@@ -18,6 +18,7 @@ import (
 	"github.com/Reisender/api-browser/internal/auth"
 	"github.com/Reisender/api-browser/internal/client"
 	"github.com/Reisender/api-browser/internal/config"
+	"github.com/Reisender/api-browser/internal/openapi"
 	"github.com/Reisender/api-browser/internal/spec"
 )
 
@@ -70,6 +71,18 @@ func (a *App) PromptForSpec() {
 		return
 	}
 	a.push(newSpecScreen(a))
+}
+
+// PromptForProfile pushes the saved-profile picker on top of the stack. main
+// calls it at startup when neither -profile nor a default profile named a
+// connection. With no saved profiles there is nothing to choose, so it is a
+// no-op.
+func (a *App) PromptForProfile() {
+	f, err := config.Load(a.configPath)
+	if err != nil || len(f.Profiles) < 2 {
+		return
+	}
+	a.push(newProfileScreen(a, f))
 }
 
 // setSpec swaps the spec the app navigates and repoints the client at the new
@@ -228,6 +241,71 @@ func (a *App) saveProfile() error {
 		f.Default = a.profile.Name
 	}
 	return f.Save(a.configPath)
+}
+
+// openProfilePicker pushes the picker, re-reading the config file so that
+// profiles saved this session — or edited outside it — show up.
+func (a *App) openProfilePicker() tea.Cmd {
+	f, err := config.Load(a.configPath)
+	if err != nil {
+		return setStatus(err.Error(), true)
+	}
+	if len(f.Profiles) == 0 {
+		return setStatus("no saved profiles in "+a.configPath+" — press a to set up a connection, then ctrl+s to save it", true)
+	}
+	a.push(newProfileScreen(a, f))
+	return nil
+}
+
+// useProfile switches the whole connection: auth, base URL, headers and, when
+// the profile names a different one, the spec. Everything above the resource
+// list was fetched from the old connection, so the stack starts over, exactly
+// as switching spec does. Nothing is mutated until every step that can fail
+// has succeeded, so a bad profile leaves the session as it was.
+func (a *App) useProfile(p config.Profile) error {
+	if err := p.Auth.Validate(); err != nil {
+		return err
+	}
+	authn, err := auth.New(p.Auth)
+	if err != nil {
+		return err
+	}
+	s := a.spec
+	if p.Spec != "" && p.Spec != a.profile.Spec {
+		if s, err = openapi.LoadAny(p.Spec); err != nil {
+			return err
+		}
+	}
+	if p.Spec == "" {
+		p.Spec = a.profile.Spec
+	}
+	a.spec = s
+	a.profile = p
+	a.client = client.New(p.BaseURL, s, authn)
+	a.client.Headers = p.Headers
+	a.stack = []screen{newResourcesScreen(s)}
+	if p.BaseURL == "" {
+		a.push(newConnectionScreen(a))
+	}
+	return nil
+}
+
+// toggleDefaultProfile makes name the default profile, or clears the default
+// when it already is, and returns the saved config.
+func (a *App) toggleDefaultProfile(name string) (*config.File, error) {
+	f, err := config.Load(a.configPath)
+	if err != nil {
+		return nil, err
+	}
+	if f.Default == name {
+		f.Default = ""
+	} else {
+		f.Default = name
+	}
+	if err := f.Save(a.configPath); err != nil {
+		return nil, err
+	}
+	return f, nil
 }
 
 func (a *App) copyText(s string) tea.Cmd {
@@ -399,6 +477,13 @@ func (a *App) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return a, nil
 		}
+	case "P":
+		if !inForm && !isFiltering(top) {
+			if _, already := top.(*profileScreen); already {
+				return a, nil
+			}
+			return a, a.openProfilePicker()
+		}
 	case "H":
 		if !inForm && !isFiltering(top) {
 			a.stack = a.stack[:1]
@@ -428,6 +513,8 @@ func isFiltering(s screen) bool {
 	case *resourcesScreen:
 		return x.list.SettingFilter()
 	case *specScreen:
+		return x.list.SettingFilter()
+	case *profileScreen:
 		return x.list.SettingFilter()
 	}
 	return false
@@ -465,7 +552,11 @@ func (a *App) headerView(w int) string {
 		}
 	}
 	left := styleTitle.Render("api-browser") + " " + strings.Join(crumbs, styleCrumbSep.Render(" › "))
-	right := styleDim.Render(a.client.BaseURL + "  " + a.client.Auth.Describe())
+	info := a.client.BaseURL + "  " + a.client.Auth.Describe()
+	if a.profile.Name != "" {
+		info = a.profile.Name + "  " + info
+	}
+	right := styleDim.Render(info)
 	gap := w - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 1 {
 		right = ""
@@ -509,6 +600,7 @@ func (a *App) helpView(w, h int) string {
 		{"H", "jump to resource list"},
 		{"a", "connection & auth settings"},
 		{"S", "switch API spec"},
+		{"P", "switch profile"},
 		{"ctrl+c", "quit"},
 	} {
 		b.WriteString(fmt.Sprintf("  %-18s %s\n", styleHelpKey.Render(e.key), e.desc))
