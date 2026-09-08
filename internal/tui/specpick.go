@@ -66,13 +66,18 @@ func (s *specScreen) update(a *App, msg tea.Msg) tea.Cmd {
 			if !ok {
 				return nil
 			}
+			// Choosing the spec already in effect is a no-op: keep the
+			// navigation the user came from rather than resetting it.
+			if it.info.ID == a.profile.Spec {
+				a.pop()
+				return setStatus("already using "+a.spec.Name, false)
+			}
 			loaded, err := spec.LoadBuiltin(it.info.ID)
 			if err != nil {
 				return setStatus(err.Error(), true)
 			}
 			a.setSpec(loaded, it.info.ID)
-			a.pop()
-			return setStatus("using spec "+loaded.Name, false)
+			return setStatus("switched to "+loaded.Name, false)
 		}
 	}
 	var cmd tea.Cmd

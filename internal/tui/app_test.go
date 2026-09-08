@@ -70,11 +70,17 @@ func init() { cursorMode = cursor.CursorStatic }
 
 func newTestApp(t *testing.T, srv *httptest.Server) *App {
 	t.Helper()
-	s, err := spec.LoadBuiltin("oneroster-v1p1")
+	return newTestAppOn(t, srv, "oneroster-v1p1")
+}
+
+// newTestAppOn builds an app on a named builtin spec.
+func newTestAppOn(t *testing.T, srv *httptest.Server, specName string) *App {
+	t.Helper()
+	s, err := spec.LoadBuiltin(specName)
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := config.Profile{Name: "test", BaseURL: srv.URL, Spec: "oneroster-v1p1", Auth: auth.Config{Method: auth.MethodBearer, Token: "tok"}}
+	p := config.Profile{Name: "test", BaseURL: srv.URL, Spec: specName, Auth: auth.Config{Method: auth.MethodBearer, Token: "tok"}}
 	a, err := New(s, p, filepath.Join(t.TempDir(), "cfg.yaml"))
 	if err != nil {
 		t.Fatal(err)

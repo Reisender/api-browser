@@ -72,13 +72,18 @@ func (a *App) PromptForSpec() {
 	a.push(newSpecScreen(a))
 }
 
-// setSpec swaps the spec the app navigates, rebuilding the resource list at
-// the bottom of the stack and repointing the client at the new base path.
+// setSpec swaps the spec the app navigates and repoints the client at the new
+// base path. Everything above the resource list was built from the old spec —
+// its resources, request paths and responses no longer apply — so the stack
+// starts over, exactly as it does at launch.
 func (a *App) setSpec(s *spec.Spec, name string) {
 	a.spec = s
 	a.profile.Spec = name
 	a.client.Spec = s
-	a.stack[0] = newResourcesScreen(s)
+	a.stack = []screen{newResourcesScreen(s)}
+	if a.profile.BaseURL == "" {
+		a.push(newConnectionScreen(a))
+	}
 }
 
 func (a *App) Init() tea.Cmd { return a.spin.Tick }
@@ -387,6 +392,13 @@ func (a *App) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.push(newConnectionScreen(a))
 			return a, nil
 		}
+	case "S":
+		if !inForm && !isFiltering(top) {
+			if _, already := top.(*specScreen); !already {
+				a.push(newSpecScreen(a))
+			}
+			return a, nil
+		}
 	case "H":
 		if !inForm && !isFiltering(top) {
 			a.stack = a.stack[:1]
@@ -496,6 +508,7 @@ func (a *App) helpView(w, h int) string {
 		{"q", "back (quit at top level)"},
 		{"H", "jump to resource list"},
 		{"a", "connection & auth settings"},
+		{"S", "switch API spec"},
 		{"ctrl+c", "quit"},
 	} {
 		b.WriteString(fmt.Sprintf("  %-18s %s\n", styleHelpKey.Render(e.key), e.desc))

@@ -1,6 +1,9 @@
 package tui
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
@@ -86,5 +89,141 @@ func TestSpecPickerEscKeeps(t *testing.T) {
 	}
 	if a.spec.Name != "OneRoster v1p1" {
 		t.Errorf("spec = %q, want the original OneRoster v1p1", a.spec.Name)
+	}
+}
+
+// dualServer answers both the v1.1 and the v1.2 class endpoints, so a test can
+// browse across a mid-session spec switch.
+func dualServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	j := func(w http.ResponseWriter, v any) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(v)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ims/oneroster/v1p1/classes", func(w http.ResponseWriter, r *http.Request) {
+		j(w, map[string]any{"classes": []any{map[string]any{"sourcedId": "c1", "title": "Math"}}})
+	})
+	mux.HandleFunc("/ims/oneroster/v1p1/classes/c1", func(w http.ResponseWriter, r *http.Request) {
+		j(w, map[string]any{"class": map[string]any{"sourcedId": "c1", "title": "Math"}})
+	})
+	mux.HandleFunc("/ims/oneroster/rostering/v1p2/classes", func(w http.ResponseWriter, r *http.Request) {
+		j(w, map[string]any{"classes": []any{map[string]any{"sourcedId": "c9", "title": "Math 1.2"}}})
+	})
+	return httptest.NewServer(mux)
+}
+
+// TestSwitchSpecMidSession uses the S keybinding to change spec while browsing.
+func TestSwitchSpecMidSession(t *testing.T) {
+	srv := dualServer(t)
+	defer srv.Close()
+	a := newTestAppOn(t, srv, "oneroster-v1p1")
+
+	// Browse a couple of levels deep on v1.1.
+	selectResource(t, a, "classes")
+	press(t, a, "enter", "enter")
+	if _, ok := a.top().(*itemScreen); !ok || a.Depth() != 3 {
+		t.Fatalf("setup: top=%T depth=%d status=%q", a.top(), a.Depth(), a.status)
+	}
+
+	press(t, a, "S")
+	if _, ok := a.top().(*specScreen); !ok {
+		t.Fatalf("S: top is %T, want *specScreen", a.top())
+	}
+	// A second S does not stack another picker.
+	press(t, a, "S")
+	if a.Depth() != 4 {
+		t.Errorf("depth after a second S = %d, want 4", a.Depth())
+	}
+
+	press(t, a, "down", "enter")
+	if a.spec.Name != "OneRoster v1p2" || a.profile.Spec != "oneroster-v1p2" {
+		t.Fatalf("spec = %q / %q", a.spec.Name, a.profile.Spec)
+	}
+	// Screens built from the old spec are gone.
+	if a.Depth() != 1 {
+		t.Errorf("depth after switching = %d, want 1", a.Depth())
+	}
+	if _, ok := a.top().(*resourcesScreen); !ok {
+		t.Fatalf("top is %T, want *resourcesScreen", a.top())
+	}
+	if !strings.Contains(a.status, "OneRoster v1p2") {
+		t.Errorf("status = %q", a.status)
+	}
+
+	// Browsing now goes to the v1.2 service path.
+	selectResource(t, a, "classes")
+	press(t, a, "enter")
+	cs, ok := a.top().(*collectionScreen)
+	if !ok {
+		t.Fatalf("top is %T (status %q)", a.top(), a.status)
+	}
+	if !strings.Contains(cs.resp.URL, "/ims/oneroster/rostering/v1p2/classes") {
+		t.Errorf("url = %s", cs.resp.URL)
+	}
+	if len(cs.resp.Items) != 1 || cs.resp.Items[0]["title"] != "Math 1.2" {
+		t.Errorf("items = %v", cs.resp.Items)
+	}
+}
+
+// TestSwitchSpecSameChoiceKeepsStack: re-picking the current spec is a no-op.
+func TestSwitchSpecSameChoiceKeepsStack(t *testing.T) {
+	srv := dualServer(t)
+	defer srv.Close()
+	a := newTestAppOn(t, srv, "oneroster-v1p1")
+	selectResource(t, a, "classes")
+	press(t, a, "enter")
+	if a.Depth() != 2 {
+		t.Fatalf("setup depth = %d", a.Depth())
+	}
+
+	press(t, a, "S", "enter")
+	if a.Depth() != 2 {
+		t.Errorf("depth = %d, want the collection kept at 2", a.Depth())
+	}
+	if _, ok := a.top().(*collectionScreen); !ok {
+		t.Errorf("top is %T, want the collection back", a.top())
+	}
+	if a.spec.Name != "OneRoster v1p1" {
+		t.Errorf("spec = %q", a.spec.Name)
+	}
+	if !strings.Contains(a.status, "already using") {
+		t.Errorf("status = %q", a.status)
+	}
+}
+
+// TestSwitchSpecKeyIgnoredInForms: S is a normal character while typing.
+func TestSwitchSpecKeyIgnoredInForms(t *testing.T) {
+	srv := dualServer(t)
+	defer srv.Close()
+	a := newTestAppOn(t, srv, "oneroster-v1p1")
+
+	// Connection screen: S goes into the focused field.
+	press(t, a, "a")
+	cn, ok := a.top().(*connectionScreen)
+	if !ok {
+		t.Fatalf("top is %T", a.top())
+	}
+	cn.form.set("baseUrl", "")
+	press(t, a, "S")
+	if got := cn.form.get("baseUrl"); got != "S" {
+		t.Errorf("baseUrl = %q, want the typed S", got)
+	}
+	press(t, a, "esc")
+
+	// Resource list filter: S narrows the filter instead of switching spec.
+	// Driven directly because the list's own filter input schedules a cursor
+	// blink that press/drain would block on.
+	a.Update(key("/"))
+	rs := a.top().(*resourcesScreen)
+	if !rs.list.SettingFilter() {
+		t.Fatal("/ did not start filtering the resource list")
+	}
+	a.Update(key("S"))
+	if _, ok := a.top().(*specScreen); ok {
+		t.Error("S while filtering should not open the spec picker")
+	}
+	if !strings.Contains(rs.list.FilterValue(), "S") {
+		t.Errorf("filter = %q, want the typed S", rs.list.FilterValue())
 	}
 }

@@ -73,6 +73,14 @@ Name one with `-spec`. If neither `-spec` nor the profile names a spec,
 apibrowser opens a picker on start; `esc` there keeps the default
 (`oneroster-v1p1`).
 
+`S` reopens that picker at any time, so you can switch between v1.1 and v1.2
+against the same host without restarting. Switching resets the navigation
+back to the resource list — the collections and records you were looking at
+belong to the old spec's endpoints — and keeps the connection and auth as they
+are. Picking the spec you are already on just returns you to what you were
+doing. `ctrl+s` on the connection screen saves the current spec with the
+profile.
+
 ### Profiles
 
 Press `a` (or `ctrl+s` on the connection screen) to save the current
@@ -94,7 +102,7 @@ Flags override profile values, so `-profile district -token X` swaps the token.
 | Collection | `enter` open item · `i` GET by id · `/` live search rows · `A` fetch all pages · `n`/`p` next/prev page · `f` server filter · `s` sort · `L` page size · `e` edit all params · `r` raw JSON · `u` show URL · `y` copy id · `w` save records to file · `R` reload |
 | Item | `enter` follow reference / toggle node · `t` toggle tree / pretty JSON · `w` save record to file · `l` related sub-collections · `←`/`→` collapse/expand · `+`/`-` expand/collapse all · `r` raw · `y` copy value |
 | Raw | scroll · `y` copy JSON · `w` save response to file |
-| Everywhere | `esc`/`backspace` back · `H` home · `a` connection · `?` help · `q` back/quit · `ctrl+c` quit |
+| Everywhere | `esc`/`backspace` back · `H` home · `a` connection · `S` switch spec · `?` help · `q` back/quit · `ctrl+c` quit |
 
 Every request parameter is editable. On a collection, `L` changes the page
 size (e.g. 100 → 1000), `f` and `s` set the server-side filter and sort, and
